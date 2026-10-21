@@ -209,7 +209,6 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
-  const debugTextRef = useRef<HTMLDivElement>(null);
 
   const [isSectionVisible, setIsSectionVisible] = useState(false);
 
@@ -291,9 +290,6 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
       ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
       lastDrawnRef.current = actualIndex;
 
-      if (debugTextRef.current) {
-        debugTextRef.current.textContent = `Frame ${START_FRAME + actualIndex} / ${END_FRAME}`;
-      }
     } catch {
       // If bitmap was detached, invalidate so it can be re-fetched safely
       bitmapsRef.current[actualIndex] = null;
@@ -412,13 +408,6 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
           const curIndex = Math.min(TOTAL_FRAMES - 1, Math.max(0, Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1))));
           drawFrame(curIndex);
         }
-
-        if (debugTextRef.current) {
-          debugTextRef.current.textContent =
-            loaded === TOTAL_FRAMES
-              ? `${TOTAL_FRAMES} frames ready`
-              : `Loading ${loaded}/${TOTAL_FRAMES}`;
-        }
       } catch (err) {
         console.warn(`Frame ${frameNum} load error:`, err);
       }
@@ -477,7 +466,7 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
       className="relative h-full w-full overflow-y-auto no-scrollbar bg-[#0C100D]"
     >
       {/* Technical DAG grid background */}
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         <div className="grid-overlay absolute inset-0 opacity-30" />
       </div>
 
@@ -744,16 +733,8 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
             </div>
           </div>
 
-          {/* Frame counter — instrument badge */}
-          <div
-            ref={debugTextRef}
-            className="fixed bottom-4 right-4 z-40 rounded-md px-2.5 py-1 font-mono text-[10px] text-[#8B968B] select-none bg-[#141A15]/80 border border-[#243026]"
-          >
-            Loading frames...
-          </div>
-
           {/* Scroll progress — 1px hairline without transition lag */}
-          <div className="fixed bottom-0 inset-x-0 h-px bg-[#243026] z-40">
+          <div className="absolute bottom-0 inset-x-0 h-px bg-[#243026] z-40">
             <div
               ref={progressBarRef}
               className="h-full w-full bg-[#7FBF6A] will-change-transform origin-left"

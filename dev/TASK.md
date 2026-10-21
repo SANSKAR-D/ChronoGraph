@@ -13,8 +13,8 @@
 ---
 
 ## Phase 2: Core DAG Engine & Topological Orchestrator (Hours 3–10)
-- [ ] **T2.1 (Cycle Detection Module):** Implement shared `validateDAG(nodes, edges)` utility in `src/lib/dag/cycle-detector.ts` using both 3-color DFS (returns exact cycle path for UI highlighting) and Kahn's in-degree algorithm[cite: 8, 18].
-- [ ] **T2.2 (Unit Tests for DAG Math):** Write Vitest unit tests proving `validateDAG` catches self-loops, 2-node loops, and deep 6-node transitive cycles[cite: 8].
+- [x] **T2.1 (Cycle Detection Module):** Implement shared `validateDAG(nodes, edges)` utility in `src/lib/dag/cycle-detector.ts` using both 3-color DFS (returns exact cycle path for UI highlighting) and Kahn's in-degree algorithm[cite: 8, 18].
+- [x] **T2.2 (Unit Tests for DAG Math):** Write Vitest unit tests proving `validateDAG` catches self-loops, 2-node loops, and deep 6-node transitive cycles[cite: 8].
 - [ ] **T2.3 (Redis Lua Fan-Out Script):** Implement `src/lib/redis/lua-scripts.ts` containing the atomic `HINCRBY` in-degree decrement script and idempotency lock acquisition (`SET NX`)[cite: 8, 18].
 - [ ] **T2.4 (Webhook Ingestion API):** Build `POST /api/v1/hooks/[webhookId]/route.ts` that verifies HMAC signatures, seeds `run:{id}:indegree` in Redis, enqueues root nodes (`in-degree == 0`), and returns `202 Accepted` in $< 25\text{ ms}$[cite: 8, 18].
 - [ ] **T2.5 (Cron Trigger Scheduler):** Connect BullMQ repeatable jobs (`queue.upsertJobScheduler`) to trigger workflows on cron schedules[cite: 8, 18].

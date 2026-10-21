@@ -42,6 +42,17 @@
   --alert: #E5735C;
 }
 
+.light-theme {
+  --background: #F7F8F7;
+  --foreground: #111814;
+  --surface: #FAFAF9;
+  --border: #E2E6E3;
+  --muted: #667268;
+  --accent: #7FBF6A;
+  --accent-hover: #92CF7D;
+  --alert: #DC2626;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
