@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Activity, Server, RefreshCw, Radio } from "lucide-react";
+import { CronSchedulersPanel } from "@/components/telemetry/CronSchedulersPanel";
 
 interface WorkerNode {
   id: string; name: string; status: "healthy" | "busy";
@@ -81,6 +82,9 @@ export function TelemetryView() {
           </div>
         ))}
       </div>
+
+      {/* BullMQ Repeatable Cron Schedulers Panel (Task T2.5) */}
+      <CronSchedulersPanel />
 
       {/* Worker Pool Table */}
       <div className="liquid-glass rounded-2xl overflow-hidden">
