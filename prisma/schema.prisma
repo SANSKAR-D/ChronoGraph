@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  PARTIAL_FAILURE
+  FAILED
+  ABORTED
+
+  @@map("run_status")
+}
+
+enum NodeExecStatus {
+  IDLE
+  QUEUED
+  RUNNING
+  RETRYING
+  SUCCESS
+  FAILED
+  DLQ
+
+  @@map("node_exec_status")
+}
+
+enum TriggerSource {
+  WEBHOOK
+  CRON
+  MANUAL
+
+  @@map("trigger_source")
+}
+
+model WorkflowBlueprint {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String         @db.VarChar(255)
+  description    String?        @db.Text
+  isActive       Boolean        @default(true) @map("is_active")
+  webhookSecret  String         @map("webhook_secret") @db.VarChar(128)
+  cronExpression String?        @map("cron_expression") @db.VarChar(64)
+  nodesJson      Json           @map("nodes_json")
+  edgesJson      Json           @map("edges_json")
+  adjacencyMap   Json           @map("adjacency_map")
+  baseIndegrees  Json           @map("base_indegrees")
+  version        Int            @default(1)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  runs           WorkflowRun[]
+
+  @@map("workflow_blueprints")
+}
+
+model WorkflowRun {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowId     String               @map("workflow_id") @db.Uuid
+  status         RunStatus            @default(PENDING)
+  triggerType    TriggerSource        @map("trigger_type")
+  triggerPayload Json                 @default("{}") @map("trigger_payload")
+  startedAt      DateTime             @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt    DateTime?            @map("completed_at") @db.Timestamptz(6)
+  workflow       WorkflowBlueprint    @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  logs           NodeExecutionLog[]
+  deadLetterJobs DeadLetterJob[]
+
+  @@index([workflowId, startedAt(sort: Desc)], map: "idx_runs_workflow")
+  @@map("workflow_runs")
+}
+
+model NodeExecutionLog {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId          String         @map("run_id") @db.Uuid
+  nodeId         String         @map("node_id") @db.VarChar(128)
+  idempotencyKey String         @unique @map("idempotency_key") @db.VarChar(64)
+  status         NodeExecStatus
+  attemptNumber  Int            @default(1) @map("attempt_number")
+  inputPayload   Json?          @map("input_payload")
+  outputPayload  Json?          @map("output_payload")
+  errorMessage   String?        @map("error_message") @db.Text
+  httpStatusCode Int?           @map("http_status_code")
+  durationMs     Int?           @map("duration_ms")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  run            WorkflowRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, nodeId], map: "idx_logs_run_node")
+  @@map("node_execution_logs")
+}
+
+model DeadLetterJob {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId         String      @map("run_id") @db.Uuid
+  workflowId    String      @map("workflow_id") @db.Uuid
+  nodeId        String      @map("node_id") @db.VarChar(128)
+  failedPayload Json        @map("failed_payload")
+  lastError     String      @map("last_error") @db.Text
+  attemptsMade  Int         @map("attempts_made")
+  replayed      Boolean     @default(false)
+  failedAt      DateTime    @default(now()) @map("failed_at") @db.Timestamptz(6)
+  run           WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@map("dead_letter_jobs")
+}

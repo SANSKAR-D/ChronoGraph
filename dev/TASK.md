@@ -5,10 +5,10 @@
 ---
 
 ## Phase 1: Repository Genesis & Infrastructure Setup (Hours 0–3)
-- [ ] **T1.1:** Initialize monorepo or Next.js 15/16 (App Router + TypeScript) project after official start time[cite: 2, 18].
-- [ ] **T1.2:** Configure `docker-compose.yml` with **PostgreSQL 16** and **Redis 7-alpine** so any mentor/judge can boot the entire backing stack with `docker compose up -d`[cite: 2, 16, 18].
-- [ ] **T1.3:** Set up Prisma or Drizzle ORM and run initial database migrations for `workflow_blueprints`, `workflow_runs`, `node_execution_logs`, and `dead_letter_jobs`[cite: 18].
-- [ ] **T1.4:** Install core dependencies: `@xyflow/react`, `motion`, `react-aria-components`, `bullmq`, `ioredis`, `lucide-react`, and Tailwind CSS[cite: 8, 18].
+- [x] **T1.1:** Initialize monorepo or Next.js 15/16 (App Router + TypeScript) project after official start time[cite: 2, 18].
+- [x] **T1.2:** Configure `docker-compose.yml` with **PostgreSQL 16** and **Redis 7-alpine** so any mentor/judge can boot the entire backing stack with `docker compose up -d`[cite: 2, 16, 18].
+- [x] **T1.3:** Set up Prisma or Drizzle ORM and run initial database migrations for `workflow_blueprints`, `workflow_runs`, `node_execution_logs`, and `dead_letter_jobs`[cite: 18].
+- [x] **T1.4:** Install core dependencies: `@xyflow/react`, `motion`, `react-aria-components`, `bullmq`, `ioredis`, `lucide-react`, and Tailwind CSS[cite: 8, 18].
 
 ---
 

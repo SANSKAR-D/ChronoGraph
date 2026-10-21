@@ -1,3 +1,11 @@
-// Database client initialization (e.g., Prisma, Drizzle, MongoDB)
-// shortcut: in-memory placeholder, connect to real DB when schema and driver are decided
-export const db = null;
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
+
+export const db = globalForPrisma.prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = db;
+}
+
+export default db;
