@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/* ── Fonts ── */
+@font-face {
+  font-family: 'Belinda';
+  src: url('/fonts/belinda.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Ranade';
+  src: url('/fonts/ranade-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ranade';
+  src: url('/fonts/ranade-medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ranade';
+  src: url('/fonts/ranade-bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --background: #0C100D;
+  --foreground: #E8ECE4;
+  --surface: #141A15;
+  --border: #243026;
+  --muted: #8B968B;
+  --accent: #7FBF6A;
+  --accent-hover: #92CF7D;
+  --alert: #E5735C;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-alert: var(--alert);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-brand: var(--font-brand);
+}
+
+.font-script {
+  font-family: var(--font-belinda), 'Belinda', cursive;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), 'Ranade', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+}
+
+/* ─── Liquid Glass (dark canvas variant) ─── */
+.liquid-glass {
+  position: relative;
+  background: linear-gradient(135deg,
+      rgba(20, 26, 21, 0.70) 0%,
+      rgba(20, 26, 21, 0.45) 50%,
+      rgba(20, 26, 21, 0.60) 100%);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border: 1px solid #243026;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 20px 45px -10px rgba(0, 0, 0, 0.65),
+    0 8px 20px -4px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+/* Specular top-edge sheen */
+.liquid-glass::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44%;
+  background: linear-gradient(180deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.04) 60%,
+      rgba(255, 255, 255, 0) 100%);
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ─── Ambient breathing glow on cards when idle ─── */
+@keyframes ambient-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.65), 0 8px 20px -4px rgba(0, 0, 0, 0.35), inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.18), inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.45);
+  }
+
+  50% {
+    box-shadow: 0 20px 55px -8px rgba(0, 0, 0, 0.55), 0 8px 28px -4px rgba(110, 231, 183, 0.06), inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.22), inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.35);
+  }
+}
+
+.liquid-glass-pulse {
+  animation: ambient-pulse 4s ease-in-out infinite;
+}
+
+/* ─── Technical DAG coordinate grid overlay ─── */
+.grid-overlay {
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 32px 32px, 32px 32px, 32px 32px;
+}
+
+/* ─── Tab glow indicator ─── */
+@keyframes tab-glow {
+
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ─── Hide scrollbar ─── */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
