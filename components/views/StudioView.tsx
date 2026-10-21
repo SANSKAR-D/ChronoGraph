@@ -6,22 +6,37 @@ import {
   RotateCcw,
   CheckCircle2,
   Globe,
-  Shuffle,
   Clock,
   Code,
-  Shield,
+  Send,
+  Hourglass,
   Layers,
   Plus,
   ZoomIn,
   ZoomOut,
   Maximize2,
+  ChevronUp,
+  ChevronDown,
+  Trash2,
+  X,
   Sparkles,
+  AlertTriangle,
+  Link2,
 } from "lucide-react";
+import { validateDAG } from "@/lib/dag/cycle-detector";
 
-interface WorkflowNode {
+export type CoreNodeType =
+  | "webhook_trigger"
+  | "cron_trigger"
+  | "transform_script"
+  | "http_request"
+  | "delay_timer";
+
+export interface WorkflowNode {
   id: string;
   name: string;
-  type: "trigger" | "cycle_guard" | "mutex" | "worker" | "sink";
+  type: CoreNodeType;
+  category: "trigger" | "action";
   status: "idle" | "running" | "success";
   detail: string;
   badge: string;
@@ -29,80 +44,153 @@ interface WorkflowNode {
   y: number;
 }
 
-interface Connection {
+export interface Connection {
   from: string;
   to: string;
 }
 
+export interface NodeTemplate {
+  type: CoreNodeType;
+  name: string;
+  category: "trigger" | "action";
+  badge: string;
+  detail: string;
+  description: string;
+}
+
+export const CORE_NODE_TEMPLATES: NodeTemplate[] = [
+  // ── 1. Trigger Cards (The Starting Points) ──
+  {
+    type: "webhook_trigger",
+    name: "Webhook Trigger",
+    category: "trigger",
+    badge: "TRIGGER",
+    detail: "POST /api/v1/orders/settle",
+    description:
+      "Generates a unique URL. Listens for incoming HTTP POST requests from external systems and starts the workflow.",
+  },
+  {
+    type: "cron_trigger",
+    name: "Cron Trigger",
+    category: "trigger",
+    badge: "CRON",
+    detail: "0 * * * * (Hourly Sync)",
+    description:
+      "Time-based starting point. Accepts standard cron expressions to schedule recurring workflow executions.",
+  },
+  // ── 2. Action Cards (The Execution Steps) ──
+  {
+    type: "transform_script",
+    name: "Transform / Script",
+    category: "action",
+    badge: "TRANSFORM",
+    detail: "payload.items.map(i => i.id)",
+    description:
+      "Takes the JSON payload from a previous node and filters, extracts, or modifies the data.",
+  },
+  {
+    type: "http_request",
+    name: "HTTP Request",
+    category: "action",
+    badge: "HTTP ACTION",
+    detail: "POST https://api.stripe.com/v1",
+    description:
+      "Outbound action step making external API calls (GET/POST) with idempotency keys and retry limits.",
+  },
+  {
+    type: "delay_timer",
+    name: "Delay Node",
+    category: "action",
+    badge: "DELAY",
+    detail: "Sleep 5000ms // BullMQ ZSET",
+    description:
+      "Halts the current branch for a specified duration before allowing downstream nodes to execute.",
+  },
+];
+
 const INITIAL_NODES: WorkflowNode[] = [
   {
-    id: "node_1",
-    name: "Webhook Ingest",
-    type: "trigger",
+    id: "wh_1",
+    name: "Webhook Trigger",
+    type: "webhook_trigger",
+    category: "trigger",
     status: "idle",
     detail: "POST /api/v1/orders/settle",
     badge: "TRIGGER",
     x: 100,
-    y: 280,
+    y: 200,
   },
   {
-    id: "node_2",
-    name: "Kahn Cycle Guard",
-    type: "cycle_guard",
+    id: "cron_1",
+    name: "Cron Trigger",
+    type: "cron_trigger",
+    category: "trigger",
     status: "idle",
-    detail: "3-Color DFS // O(V+E) Scan",
-    badge: "CYCLE GUARD",
-    x: 420,
-    y: 170,
+    detail: "0 * * * * (Hourly Sync)",
+    badge: "CRON",
+    x: 100,
+    y: 380,
   },
   {
-    id: "node_3",
-    name: "Redis Lua Mutex",
-    type: "mutex",
+    id: "trans_1",
+    name: "Transform / Script",
+    type: "transform_script",
+    category: "action",
     status: "idle",
-    detail: "SETNX key: dag:402 ttl=250ms",
-    badge: "MUTEX",
-    x: 420,
-    y: 390,
+    detail: "payload.items.map(i => i.id)",
+    badge: "TRANSFORM",
+    x: 430,
+    y: 290,
   },
   {
-    id: "node_4",
-    name: "BullMQ Worker Pool",
-    type: "worker",
+    id: "http_1",
+    name: "HTTP Request",
+    type: "http_request",
+    category: "action",
     status: "idle",
-    detail: "Worker #04 // 20 Concurrency",
-    badge: "DISPATCH",
-    x: 750,
-    y: 280,
+    detail: "POST https://api.stripe.com/v1",
+    badge: "HTTP ACTION",
+    x: 760,
+    y: 290,
   },
   {
-    id: "node_5",
-    name: "Receipt ACK Sink",
-    type: "sink",
+    id: "delay_1",
+    name: "Delay Node",
+    type: "delay_timer",
+    category: "action",
     status: "idle",
-    detail: "Emit Event // 200 OK Response",
-    badge: "COMPLETED",
-    x: 1080,
-    y: 280,
+    detail: "Sleep 5000ms // BullMQ ZSET",
+    badge: "DELAY",
+    x: 1090,
+    y: 290,
   },
 ];
 
-const CONNECTIONS: Connection[] = [
-  { from: "node_1", to: "node_2" },
-  { from: "node_1", to: "node_3" },
-  { from: "node_2", to: "node_4" },
-  { from: "node_3", to: "node_4" },
-  { from: "node_4", to: "node_5" },
+const INITIAL_CONNECTIONS: Connection[] = [
+  { from: "wh_1", to: "trans_1" },
+  { from: "cron_1", to: "trans_1" },
+  { from: "trans_1", to: "http_1" },
+  { from: "http_1", to: "delay_1" },
 ];
 
-export function StudioView() {
+export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<WorkflowNode[]>(INITIAL_NODES);
+  const [connections, setConnections] = useState<Connection[]>(INITIAL_CONNECTIONS);
   const [isRunning, setIsRunning] = useState(false);
   const [activeEdgeIndex, setActiveEdgeIndex] = useState<number>(-1);
 
+  // Bottom Drop-Up Sliding Drawer / Desk state
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Wiring / Joining connection state
+  const [connectingFromId, setConnectingFromId] = useState<string | null>(null);
+  const [mouseCanvasPos, setMouseCanvasPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
   // Pan & Zoom Canvas State
-  const [pan, setPan] = useState({ x: 40, y: 60 });
-  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState({ x: 30, y: 40 });
+  const [scale, setScale] = useState(0.95);
   const [isPanning, setIsPanning] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart = useRef({ x: 0, y: 0 });
@@ -112,10 +200,153 @@ export function StudioView() {
   const nodeDragStart = useRef({ x: 0, y: 0 });
   const nodeInitialPos = useRef({ x: 0, y: 0 });
 
+  // Validate DAG in real time using cycle detection engine
+  const dagValidation = React.useMemo(() => {
+    return validateDAG(
+      nodes.map((n) => ({ id: n.id })),
+      connections.map((c, i) => ({ id: `e_${i}`, source: c.from, target: c.to }))
+    );
+  }, [nodes, connections]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 2800);
+  };
+
+  // Add Card to Canvas from Desk via click
+  const addNodeToCanvas = (template: NodeTemplate) => {
+    const id = `${template.type}_${Date.now().toString(36)}`;
+    const offsetX = Math.round((-pan.x + window.innerWidth / 2 - 115) / scale + (Math.random() * 60 - 30));
+    const offsetY = Math.round((-pan.y + window.innerHeight / 2 - 80) / scale + (Math.random() * 60 - 30));
+
+    const newNode: WorkflowNode = {
+      id,
+      name: template.name,
+      type: template.type,
+      category: template.category,
+      status: "idle",
+      detail: template.detail,
+      badge: template.badge,
+      x: Math.max(40, offsetX),
+      y: Math.max(120, offsetY),
+    };
+
+    setNodes((prev) => [...prev, newNode]);
+    showToast(`Added "${template.name}" to canvas`);
+  };
+
+  // Drag and Drop from Node Desk onto Canvas
+  const handleCanvasDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleCanvasDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const nodeType = (e.dataTransfer.getData("application/chronograph-node-type") ||
+      e.dataTransfer.getData("text/plain")) as CoreNodeType;
+
+    const template = CORE_NODE_TEMPLATES.find((t) => t.type === nodeType);
+    if (!template || !canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const dropClientX = e.clientX - rect.left;
+    const dropClientY = e.clientY - rect.top;
+
+    // Convert screen coordinates to canvas world coordinates taking pan & scale into account
+    const worldX = Math.round((dropClientX - pan.x) / scale - 115);
+    const worldY = Math.round((dropClientY - pan.y) / scale - 48);
+
+    const id = `${template.type}_${Date.now().toString(36)}`;
+    const newNode: WorkflowNode = {
+      id,
+      name: template.name,
+      type: template.type,
+      category: template.category,
+      status: "idle",
+      detail: template.detail,
+      badge: template.badge,
+      x: Math.max(20, worldX),
+      y: Math.max(80, worldY),
+    };
+
+    setNodes((prev) => [...prev, newNode]);
+    showToast(`Dropped "${template.name}" onto canvas`);
+  };
+
+  // Delete a node and its connections
+  const deleteNode = (nodeId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNodes((prev) => prev.filter((n) => n.id !== nodeId));
+    setConnections((prev) => prev.filter((c) => c.from !== nodeId && c.to !== nodeId));
+    if (connectingFromId === nodeId) {
+      setConnectingFromId(null);
+    }
+  };
+
+  // Delete a specific connection wire
+  const deleteConnection = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConnections((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Handle Port Click to Connect Nodes
+  const handleOutputPortClick = (e: React.MouseEvent, nodeId: string) => {
+    e.stopPropagation();
+    if (connectingFromId === nodeId) {
+      setConnectingFromId(null);
+      return;
+    }
+    setConnectingFromId(nodeId);
+    showToast(`Wiring from "${nodes.find((n) => n.id === nodeId)?.name}". Click input port on target card to join.`);
+  };
+
+  const handleInputPortClick = (e: React.MouseEvent, targetNodeId: string) => {
+    e.stopPropagation();
+    if (!connectingFromId) return;
+
+    if (connectingFromId === targetNodeId) {
+      showToast("Cannot connect a node to itself");
+      setConnectingFromId(null);
+      return;
+    }
+
+    const alreadyExists = connections.some(
+      (c) => c.from === connectingFromId && c.to === targetNodeId
+    );
+
+    if (alreadyExists) {
+      showToast("Connection already exists");
+      setConnectingFromId(null);
+      return;
+    }
+
+    const newConnections = [...connections, { from: connectingFromId, to: targetNodeId }];
+    setConnections(newConnections);
+
+    const check = validateDAG(
+      nodes.map((n) => ({ id: n.id })),
+      newConnections.map((c, i) => ({ id: `e_${i}`, source: c.from, target: c.to }))
+    );
+
+    if (!check.isValid) {
+      showToast(`Warning: Cycle detected (${check.error})`);
+    } else {
+      showToast("Joined successfully!");
+    }
+
+    setConnectingFromId(null);
+  };
+
   // Canvas Mouse Down: either drag node or pan canvas
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    // Only pan if clicking on canvas background directly
-    if ((e.target as HTMLElement).closest(".studio-node") || (e.target as HTMLElement).closest(".canvas-control")) {
+    if (
+      (e.target as HTMLElement).closest(".studio-node") ||
+      (e.target as HTMLElement).closest(".canvas-control") ||
+      (e.target as HTMLElement).closest(".node-port")
+    ) {
       return;
     }
     setIsPanning(true);
@@ -125,6 +356,11 @@ export function StudioView() {
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
+      setMouseCanvasPos({
+        x: (e.clientX - pan.x) / scale,
+        y: (e.clientY - pan.y) / scale,
+      });
+
       if (isPanning) {
         const dx = e.clientX - dragStart.current.x;
         const dy = e.clientY - dragStart.current.y;
@@ -139,22 +375,33 @@ export function StudioView() {
           prev.map((node) =>
             node.id === draggingNodeId
               ? {
-                  ...node,
-                  x: Math.round(nodeInitialPos.current.x + dx),
-                  y: Math.round(nodeInitialPos.current.y + dy),
-                }
+                ...node,
+                x: Math.round(nodeInitialPos.current.x + dx),
+                y: Math.round(nodeInitialPos.current.y + dy),
+              }
               : node
           )
         );
       }
     },
-    [isPanning, draggingNodeId, scale]
+    [isPanning, draggingNodeId, scale, pan]
   );
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);
     setDraggingNodeId(null);
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (connectingFromId) setConnectingFromId(null);
+        if (isDrawerOpen) setIsDrawerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [connectingFromId, isDrawerOpen]);
 
   useEffect(() => {
     window.addEventListener("mousemove", handleMouseMove);
@@ -165,8 +412,10 @@ export function StudioView() {
     };
   }, [handleMouseMove, handleMouseUp]);
 
-  // Node mousedown
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
+    if ((e.target as HTMLElement).closest(".node-port") || (e.target as HTMLElement).closest("button")) {
+      return;
+    }
     e.stopPropagation();
     setDraggingNodeId(nodeId);
     nodeDragStart.current = { x: e.clientX, y: e.clientY };
@@ -176,48 +425,35 @@ export function StudioView() {
     }
   };
 
-  // Run Simulation Sequence
   const runWorkflow = () => {
     if (isRunning) return;
     setIsRunning(true);
     setNodes((prev) => prev.map((n) => ({ ...n, status: "idle" })));
 
-    const sequence = [
-      { nodeIds: ["node_1"], edgeIdx: 0, delay: 0 },
-      { nodeIds: ["node_2", "node_3"], edgeIdx: 1, delay: 800 },
-      { nodeIds: ["node_4"], edgeIdx: 3, delay: 1700 },
-      { nodeIds: ["node_5"], edgeIdx: 4, delay: 2600 },
-    ];
+    const topoOrder =
+      dagValidation.isValid && dagValidation.topologicalOrder.length > 0
+        ? dagValidation.topologicalOrder
+        : nodes.map((n) => n.id);
 
-    sequence.forEach((step) => {
+    topoOrder.forEach((nodeId, idx) => {
       setTimeout(() => {
-        setActiveEdgeIndex(step.edgeIdx);
+        setActiveEdgeIndex(idx);
         setNodes((prev) =>
-          prev.map((n) => {
-            if (step.nodeIds.includes(n.id)) {
-              return { ...n, status: "running" };
-            }
-            return n;
-          })
+          prev.map((n) => (n.id === nodeId ? { ...n, status: "running" } : n))
         );
-      }, step.delay);
+      }, idx * 750);
 
       setTimeout(() => {
         setNodes((prev) =>
-          prev.map((n) => {
-            if (step.nodeIds.includes(n.id)) {
-              return { ...n, status: "success" };
-            }
-            return n;
-          })
+          prev.map((n) => (n.id === nodeId ? { ...n, status: "success" } : n))
         );
-      }, step.delay + 700);
+      }, idx * 750 + 650);
     });
 
     setTimeout(() => {
       setIsRunning(false);
       setActiveEdgeIndex(-1);
-    }, 3600);
+    }, topoOrder.length * 750 + 800);
   };
 
   const resetWorkflow = () => {
@@ -227,39 +463,87 @@ export function StudioView() {
   };
 
   const resetCanvasView = () => {
-    setPan({ x: 40, y: 60 });
-    setScale(1);
+    setPan({ x: 30, y: 40 });
+    setScale(0.95);
   };
 
-  const getNodeIcon = (type: WorkflowNode["type"]) => {
+  const getNodeIcon = (type: CoreNodeType) => {
     switch (type) {
-      case "trigger":
+      case "webhook_trigger":
         return <Globe className="h-4 w-4 text-[#7FBF6A]" />;
-      case "cycle_guard":
-        return <Shield className="h-4 w-4 text-[#75d555ff]" />;
-      case "mutex":
-        return <Code className="h-4 w-4 text-cyan-400" />;
-      case "worker":
-        return <Shuffle className="h-4 w-4 text-emerald-300" />;
-      case "sink":
-        return <CheckCircle2 className="h-4 w-4 text-white" />;
+      case "cron_trigger":
+        return <Clock className="h-4 w-4 text-[#75d555]" />;
+      case "transform_script":
+        return <Code className={`h-4 w-4 ${isLight ? "text-cyan-700" : "text-cyan-400"}`} />;
+      case "http_request":
+        return <Send className={`h-4 w-4 ${isLight ? "text-teal-700" : "text-emerald-300"}`} />;
+      case "delay_timer":
+        return <Hourglass className={`h-4 w-4 ${isLight ? "text-amber-700" : "text-amber-300"}`} />;
     }
   };
 
+  const connectingSourceNode = nodes.find((n) => n.id === connectingFromId);
+
+  const isLight = theme === "light";
+
   return (
     <div
-      className={`relative w-full h-full overflow-hidden select-none bg-[#0C100D] ${
-        isPanning ? "cursor-grabbing" : "cursor-grab"
-      }`}
+      ref={canvasRef}
+      className={`relative w-full h-full overflow-hidden select-none transition-colors duration-300 ${
+        isLight ? "bg-[#F7F8F7]" : "bg-[#0C100D]"
+      } ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
       onMouseDown={handleCanvasMouseDown}
+      onDragOver={handleCanvasDragOver}
+      onDrop={handleCanvasDrop}
       style={{
-        // Fullscreen diamond matrix canvas grid
-        backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpolygon points='12,9.75 14.25,12 12,14.25 9.75,12' fill='rgba(117,213,85,0.28)'/%3E%3C/svg%3E\")",
+        backgroundImage: isLight
+          ? "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpolygon points='12,9.75 14.25,12 12,14.25 9.75,12' fill='rgba(127,191,106,0.22)'/%3E%3C/svg%3E\")"
+          : "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpolygon points='12,9.75 14.25,12 12,14.25 9.75,12' fill='rgba(117,213,85,0.22)'/%3E%3C/svg%3E\")",
         backgroundSize: `${24 * scale}px ${24 * scale}px`,
         backgroundPosition: `${pan.x}px ${pan.y}px`,
       }}
     >
+      {/* ── Toast Notification Banner ── */}
+      {toastMessage && (
+        <div
+          className={`canvas-control pointer-events-auto absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-mono font-medium shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 ${
+            isLight
+              ? "border-[#E2E6E3] bg-[#FAFAF9]/95 text-[#111814]"
+              : "border-[#7FBF6A]/50 bg-[#141A15]/95 text-[#E8ECE4]"
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5 text-[#7FBF6A]" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* ── Active Wiring Instruction Banner ── */}
+      {connectingFromId && connectingSourceNode && (
+        <div
+          className={`canvas-control pointer-events-auto absolute top-24 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-2xl border px-5 py-2.5 text-xs font-mono shadow-xl backdrop-blur-md ${
+            isLight
+              ? "border-cyan-600/30 bg-[#FAFAF9]/95 text-cyan-950"
+              : "border-cyan-500/50 bg-[#0F171A]/95 text-[#E8ECE4]"
+          }`}
+        >
+          <div className="flex h-2 w-2 rounded-full bg-cyan-500 animate-ping" />
+          <span>
+            Wiring from <strong className={isLight ? "text-cyan-700 font-bold" : "text-cyan-300"}>{connectingSourceNode.name}</strong> → click input dot on target card
+          </span>
+          <button
+            onClick={() => setConnectingFromId(null)}
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors cursor-pointer ${
+              isLight
+                ? "border-[#D1D9D0] bg-[#F4F6F2] text-[#5E695E] hover:text-[#141A15]"
+                : "border-[#243026] bg-[#141A15] text-[#8B968B] hover:text-white"
+            }`}
+          >
+            <X className="h-3 w-3" />
+            <span>Cancel</span>
+          </button>
+        </div>
+      )}
+
       {/* ── Main Canvas World Transform Layer ── */}
       <div
         className="absolute inset-0 origin-top-left pointer-events-none"
@@ -268,7 +552,7 @@ export function StudioView() {
         }}
       >
         {/* SVG Bezier Connection Lines */}
-        <svg className="absolute inset-0 w-[3000px] h-[3000px] overflow-visible pointer-events-none z-0">
+        <svg className="absolute inset-0 w-[4000px] h-[4000px] overflow-visible pointer-events-none z-0">
           <defs>
             <filter id="n8nGlow" x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur stdDeviation="3.5" result="blur" />
@@ -276,17 +560,17 @@ export function StudioView() {
             </filter>
             <linearGradient id="activeLineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#7FBF6A" />
-              <stop offset="50%" stopColor="#75d555ff" />
+              <stop offset="50%" stopColor="#75d555" />
               <stop offset="100%" stopColor="#92CF7D" />
             </linearGradient>
           </defs>
 
-          {CONNECTIONS.map((conn, idx) => {
+          {connections.map((conn, idx) => {
             const source = nodes.find((n) => n.id === conn.from);
             const target = nodes.find((n) => n.id === conn.to);
             if (!source || !target) return null;
 
-            // Output port: right center of source card (card width = 230, height = 96)
+            // Output port: right center of 230px card
             const sx = source.x + 230;
             const sy = source.y + 48;
             // Input port: left center of target card
@@ -297,18 +581,34 @@ export function StudioView() {
             const pathData = `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
             const isActive = isRunning && (activeEdgeIndex === idx || source.status === "running");
 
+            const isCycleEdge =
+              dagValidation.cyclePath &&
+              dagValidation.cyclePath.includes(conn.from) &&
+              dagValidation.cyclePath.includes(conn.to);
+
             return (
-              <g key={`${conn.from}-${conn.to}`}>
-                {/* Base wire */}
+              <g key={`${conn.from}-${conn.to}-${idx}`} className="group pointer-events-auto">
                 <path
                   d={pathData}
-                  stroke="#243026"
+                  stroke="transparent"
+                  strokeWidth="14"
+                  fill="none"
+                  className="cursor-pointer"
+                  onClick={(e) => deleteConnection(idx, e)}
+                />
+
+                <path
+                  d={pathData}
+                  stroke={isCycleEdge ? "#EF4444" : isLight ? "#CBD5E1" : "#243026"}
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   fill="none"
+                  className={`transition-colors cursor-pointer ${
+                    isLight ? "group-hover:stroke-rose-500" : "group-hover:stroke-rose-400"
+                  }`}
+                  onClick={(e) => deleteConnection(idx, e)}
                 />
 
-                {/* Animated active execution pulse wire */}
                 {isActive && (
                   <>
                     <path
@@ -328,8 +628,7 @@ export function StudioView() {
                         repeatCount="indefinite"
                       />
                     </path>
-                    {/* Animated moving packet droplet */}
-                    <circle r="4" fill="#E8ECE4" filter="url(#n8nGlow)">
+                    <circle r="4" fill={isLight ? "#7FBF6A" : "#E8ECE4"} filter="url(#n8nGlow)">
                       <animateMotion path={pathData} dur="0.9s" repeatCount="indefinite" />
                     </circle>
                   </>
@@ -337,23 +636,51 @@ export function StudioView() {
               </g>
             );
           })}
+
+          {/* Interactive rubber-band wire when connecting */}
+          {connectingFromId && connectingSourceNode && (
+            <path
+              d={`M ${connectingSourceNode.x + 230} ${connectingSourceNode.y + 48} C ${
+                connectingSourceNode.x + 230 + 50
+              } ${connectingSourceNode.y + 48}, ${mouseCanvasPos.x - 50} ${mouseCanvasPos.y}, ${
+                mouseCanvasPos.x
+              } ${mouseCanvasPos.y}`}
+              stroke={isLight ? "#0284C7" : "#38BDF8"}
+              strokeWidth="2"
+              strokeDasharray="4 4"
+              fill="none"
+            />
+          )}
         </svg>
 
-        {/* Draggable Workflow Nodes */}
+        {/* ── Draggable Workflow Nodes ── */}
         {nodes.map((node) => {
           const isNodeRunning = node.status === "running";
           const isNodeSuccess = node.status === "success";
+          const isWiringSource = connectingFromId === node.id;
+          const isAvailableTarget =
+            connectingFromId !== null && connectingFromId !== node.id && node.category === "action";
 
           return (
             <div
               key={node.id}
               onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-              className={`studio-node absolute w-[230px] rounded-2xl border p-3.5 pointer-events-auto select-none transition-shadow duration-200 cursor-move ${
+              className={`studio-node absolute w-[230px] rounded-2xl border p-3.5 pointer-events-auto select-none cursor-move transition-shadow duration-150 ${
                 isNodeRunning
-                  ? "border-[#7FBF6A] bg-[#141A15] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
+                  ? isLight
+                    ? "border-[#7FBF6A] bg-[#FFFFFF] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
+                    : "border-[#7FBF6A] bg-[#141A15] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
                   : isNodeSuccess
-                  ? "border-[#7FBF6A]/50 bg-[#141A15] shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
-                  : "border-[#243026] bg-[#141A15]/95 hover:border-[#7FBF6A]/40 shadow-xl"
+                    ? isLight
+                      ? "border-[#7FBF6A]/50 bg-[#FFFFFF] shadow-[0_4px_20px_rgba(127,191,106,0.15)]"
+                      : "border-[#7FBF6A]/50 bg-[#141A15] shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
+                    : isWiringSource
+                      ? isLight
+                        ? "border-cyan-600 bg-cyan-50 shadow-[0_0_24px_rgba(6,182,212,0.3)] ring-2 ring-cyan-500/50"
+                        : "border-cyan-400 bg-[#101718] shadow-[0_0_24px_rgba(56,189,248,0.3)] ring-2 ring-cyan-400/50"
+                      : isLight
+                        ? "border-[#E2E6E3] bg-[#FFFFFF]/98 hover:border-[#7FBF6A]/50 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.05),0_8px_10px_-6px_rgba(0,0,0,0.01)]"
+                        : "border-[#243026] bg-[#141A15]/95 hover:border-[#7FBF6A]/40 shadow-xl"
               }`}
               style={{
                 left: `${node.x}px`,
@@ -363,19 +690,49 @@ export function StudioView() {
               }}
             >
               {/* Left Input Port */}
-              {node.type !== "trigger" && (
-                <div className="absolute -left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full border-2 border-[#243026] bg-[#0C100D] hover:border-[#7FBF6A] transition-colors" />
+              {node.category === "action" && (
+                <div
+                  onClick={(e) => handleInputPortClick(e, node.id)}
+                  className={`node-port absolute -left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full border-2 transition-colors cursor-pointer ${
+                    isAvailableTarget
+                      ? isLight
+                        ? "border-cyan-600 bg-cyan-100 ring-4 ring-cyan-500/40 animate-pulse scale-125"
+                        : "border-cyan-400 bg-cyan-950 ring-4 ring-cyan-400/40 animate-pulse scale-125"
+                      : isLight
+                        ? "border-[#E2E6E3] bg-[#F7F8F7] hover:border-[#7FBF6A]"
+                        : "border-[#243026] bg-[#0C100D] hover:border-[#7FBF6A]"
+                  }`}
+                  title="Click to connect input"
+                />
               )}
 
               {/* Right Output Port */}
-              {node.type !== "sink" && (
-                <div className="absolute -right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full border-2 border-[#7FBF6A] bg-[#0C100D] shadow-[0_0_8px_rgba(127,191,106,0.5)]" />
-              )}
+              <div
+                onClick={(e) => handleOutputPortClick(e, node.id)}
+                className={`node-port absolute -right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full border-2 transition-all cursor-pointer ${
+                  isWiringSource
+                    ? isLight
+                      ? "border-cyan-600 bg-cyan-100 ring-4 ring-cyan-500/40 animate-pulse scale-125"
+                      : "border-cyan-400 bg-cyan-950 ring-4 ring-cyan-400/40 animate-pulse scale-125"
+                    : isLight
+                      ? "border-[#7FBF6A] bg-[#F7F8F7] shadow-[0_0_8px_rgba(127,191,106,0.4)] hover:scale-125"
+                      : "border-[#7FBF6A] bg-[#0C100D] shadow-[0_0_8px_rgba(127,191,106,0.5)] hover:scale-125"
+                }`}
+                title="Click to wire to another node"
+              />
 
               {/* Node Card Header */}
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#243026]">
+              <div
+                className={`flex items-center justify-between pb-2 mb-2 border-b ${
+                  isLight ? "border-[#EFF2EE]" : "border-[#243026]"
+                }`}
+              >
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#243026] bg-[#0C100D]">
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
+                      isLight ? "border-[#E2E6E3] bg-[#F7F8F7]" : "border-[#243026] bg-[#0C100D]"
+                    }`}
+                  >
                     {getNodeIcon(node.type)}
                   </div>
                   <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#7FBF6A]">
@@ -383,52 +740,67 @@ export function StudioView() {
                   </span>
                 </div>
 
-                {isNodeRunning ? (
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#7FBF6A] opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#7FBF6A]" />
-                  </span>
-                ) : isNodeSuccess ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-[#7FBF6A]" />
-                ) : null}
+                <div className="flex items-center gap-1.5">
+                  {isNodeRunning ? (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-[#7FBF6A]" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#7FBF6A]" />
+                    </span>
+                  ) : isNodeSuccess ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#7FBF6A]" />
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={(e) => deleteNode(node.id, e)}
+                    className={`${
+                      isLight ? "text-[#667268] hover:text-rose-600" : "text-[#8B968B] hover:text-rose-400"
+                    } transition-colors cursor-pointer p-0.5`}
+                    title="Remove node"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
 
               {/* Node Title & Description */}
               <div>
-                <h4 className="text-xs font-semibold text-[#E8ECE4] truncate">{node.name}</h4>
-                <p className="mt-0.5 text-[10px] font-mono text-[#8B968B] truncate">{node.detail}</p>
+                <h4
+                  className={`text-xs font-semibold truncate ${
+                    isLight ? "text-[#111814]" : "text-[#E8ECE4]"
+                  }`}
+                >
+                  {node.name}
+                </h4>
+                <p
+                  className={`mt-0.5 text-[10px] font-mono truncate ${
+                    isLight ? "text-[#667268]" : "text-[#8B968B]"
+                  }`}
+                >
+                  {node.detail}
+                </p>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════
-          Floating Minimal n8n Studio UI Controls
-          ══════════════════════════════════════════════════════════════ */}
-
-      {/* Top Left: Workflow Status Bar (Under Navbar) */}
-      <div className="canvas-control pointer-events-auto absolute top-20 left-6 z-20 flex items-center gap-2.5 rounded-xl border border-[#243026] bg-[#141A15]/90 px-3.5 py-2 shadow-2xl backdrop-blur-md">
-        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#7FBF6A]/10 text-[#7FBF6A]">
-          <Layers className="h-3.5 w-3.5" />
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[#E8ECE4]">Order Settlement DAG v3</span>
-            <span className="rounded bg-[#7FBF6A]/15 px-1.5 py-0.5 text-[9px] font-mono font-semibold text-[#7FBF6A]">
-              ACYCLIC
-            </span>
-          </div>
-          <span className="text-[10px] font-mono text-[#8B968B]">Kahn 3-Color DFS Guard: Active (0 cycles)</span>
-        </div>
-      </div>
-
-      {/* Top Right: Execute & Reset Workflow Toolbar */}
-      <div className="canvas-control pointer-events-auto absolute top-20 right-6 z-20 flex items-center gap-2 rounded-xl border border-[#243026] bg-[#141A15]/90 p-1.5 shadow-2xl backdrop-blur-md">
+      {/* ── Top Left: Execute & Reset Workflow Toolbar (In place of Dormammu Engine Canvas) ── */}
+      <div
+        className={`canvas-control pointer-events-auto absolute top-24 left-6 z-40 flex items-center gap-2 rounded-xl border p-1.5 backdrop-blur-md ${
+          isLight
+            ? "border-[#E2E6E3] bg-[#FAFAF9]/95 shadow-[0_10px_30px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,1)]"
+            : "border-[#243026] bg-[#141A15]/90 shadow-2xl"
+        }`}
+      >
         <button
           onClick={resetWorkflow}
           type="button"
-          className="flex items-center gap-1.5 rounded-lg border border-[#243026] bg-[#0C100D] px-3 py-1.5 text-xs font-mono font-medium text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40 transition-colors cursor-pointer select-none active:scale-95"
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 ${
+            isLight
+              ? "border-[#E2E6E3] bg-[#F0F2F0] text-[#667268] hover:text-[#111814] hover:border-[#7FBF6A]/50"
+              : "border-[#243026] bg-[#0C100D] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40"
+          }`}
           title="Reset Node State"
         >
           <RotateCcw className="h-3.5 w-3.5" />
@@ -437,22 +809,30 @@ export function StudioView() {
 
         <button
           onClick={runWorkflow}
-          disabled={isRunning}
+          disabled={isRunning || !dagValidation.isValid}
           type="button"
-          className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] px-4 py-1.5 text-xs font-mono font-bold text-[#0C100D] transition-all cursor-pointer select-none active:scale-95 shadow-[0_0_15px_rgba(127,191,106,0.3)] disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] text-[#0C100D] shadow-[0_0_15px_rgba(127,191,106,0.3)] px-4 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
           title="Simulate DAG Execution"
         >
           <Play className={`h-3.5 w-3.5 fill-current ${isRunning ? "animate-pulse" : ""}`} />
-          <span>{isRunning ? "Running Pipeline..." : "Execute Workflow"}</span>
+          <span>{isRunning ? "Executing..." : "Execute Workflow"}</span>
         </button>
       </div>
 
-      {/* Bottom Right: Zoom & Center Canvas Controls */}
-      <div className="canvas-control pointer-events-auto absolute bottom-6 right-6 z-20 flex items-center gap-1 rounded-xl border border-[#243026] bg-[#141A15]/90 p-1 shadow-2xl backdrop-blur-md">
+      {/* ── Bottom Right: Zoom & Center Controls ── */}
+      <div
+        className={`canvas-control pointer-events-auto absolute bottom-6 right-6 z-20 flex items-center gap-1 rounded-xl border p-1 backdrop-blur-md ${
+          isLight
+            ? "border-[#E2E6E3] bg-[#FAFAF9]/95 shadow-[0_10px_30px_rgba(0,0,0,0.06)] text-[#667268]"
+            : "border-[#243026] bg-[#141A15]/90 shadow-2xl text-[#8B968B]"
+        }`}
+      >
         <button
           onClick={() => setScale((s) => Math.min(2, s + 0.15))}
           type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-[#8B968B] hover:text-[#7FBF6A] hover:bg-[#243026] transition-colors cursor-pointer"
+          className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors cursor-pointer ${
+            isLight ? "hover:text-[#7FBF6A] hover:bg-[#F0F2F0]" : "hover:text-[#7FBF6A] hover:bg-[#243026]"
+          }`}
           title="Zoom In"
         >
           <ZoomIn className="h-4 w-4" />
@@ -460,16 +840,20 @@ export function StudioView() {
         <button
           onClick={() => setScale((s) => Math.max(0.4, s - 0.15))}
           type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-[#8B968B] hover:text-[#7FBF6A] hover:bg-[#243026] transition-colors cursor-pointer"
+          className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors cursor-pointer ${
+            isLight ? "hover:text-[#7FBF6A] hover:bg-[#F0F2F0]" : "hover:text-[#7FBF6A] hover:bg-[#243026]"
+          }`}
           title="Zoom Out"
         >
           <ZoomOut className="h-4 w-4" />
         </button>
-        <div className="h-4 w-px bg-[#243026] mx-0.5" />
+        <div className={`h-4 w-px mx-0.5 ${isLight ? "bg-[#E2E6E3]" : "bg-[#243026]"}`} />
         <button
           onClick={resetCanvasView}
           type="button"
-          className="flex items-center gap-1 px-2 h-8 rounded-lg text-[10px] font-mono text-[#8B968B] hover:text-[#7FBF6A] hover:bg-[#243026] transition-colors cursor-pointer"
+          className={`flex items-center gap-1 px-2 h-8 rounded-lg text-[10px] font-mono transition-colors cursor-pointer ${
+            isLight ? "hover:text-[#7FBF6A] hover:bg-[#F0F2F0]" : "hover:text-[#7FBF6A] hover:bg-[#243026]"
+          }`}
           title="Center Canvas"
         >
           <Maximize2 className="h-3 w-3" />
@@ -477,10 +861,198 @@ export function StudioView() {
         </button>
       </div>
 
-      {/* Bottom Left: Hint Indicator */}
-      <div className="canvas-control pointer-events-none absolute bottom-6 left-6 z-20 flex items-center gap-2 rounded-xl border border-[#243026]/70 bg-[#141A15]/80 px-3 py-1.5 text-[10px] font-mono text-[#8B968B] backdrop-blur-md">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#7FBF6A]" />
-        <span>Click & drag canvas to pan • Drag nodes to reposition</span>
+      {/* ── Bottom Left: Dormammu Engine Canvas Status Card ── */}
+      <div
+        className={`canvas-control pointer-events-auto absolute bottom-6 left-6 z-20 flex items-center gap-3 rounded-xl border px-3.5 py-2.5 backdrop-blur-md ${
+          isLight
+            ? "border-[#E2E6E3] bg-[#FAFAF9]/95 shadow-[0_10px_30px_rgba(0,0,0,0.06)]"
+            : "border-[#243026] bg-[#141A15]/90 shadow-2xl"
+        }`}
+      >
+        <div
+          className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+            dagValidation.isValid
+              ? "bg-[#7FBF6A]/10 text-[#7FBF6A]"
+              : "bg-rose-500/10 text-rose-500"
+          }`}
+        >
+          {dagValidation.isValid ? <Layers className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-xs font-bold ${isLight ? "text-[#111814]" : "text-[#E8ECE4]"}`}
+            >
+              Dormammu Engine Canvas
+            </span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[9px] font-mono font-semibold ${
+                dagValidation.isValid
+                  ? "bg-[#7FBF6A]/15 text-[#7FBF6A]"
+                  : "bg-rose-500/20 text-rose-500"
+              }`}
+            >
+              {dagValidation.isValid ? "ACYCLIC" : "CYCLE DETECTED"}
+            </span>
+          </div>
+          <div
+            className={`flex items-center gap-2 text-[10px] font-mono mt-0.5 ${
+              isLight ? "text-[#667268]" : "text-[#8B968B]"
+            }`}
+          >
+            <span>{nodes.length} Nodes • {connections.length} Wires</span>
+            <span className={isLight ? "text-[#E2E6E3]" : "text-[#243026]"}>•</span>
+            <span className="hidden sm:inline">Wire right dot → left dot</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Bottom Center: Drop-Up Desk Toggle Button ── */}
+      <div className="canvas-control pointer-events-auto absolute bottom-5 left-1/2 -translate-x-1/2 z-30">
+        <button
+          onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+          type="button"
+          className={`flex items-center gap-2.5 rounded-full border px-5 py-2.5 text-xs font-mono font-semibold transition-all cursor-pointer select-none active:scale-95 group backdrop-blur-xl ${
+            isLight
+              ? "border-[#7FBF6A]/40 bg-[#FAFAF9]/95 text-[#111814] hover:bg-[#F0F2F0] hover:border-[#7FBF6A] shadow-[0_4px_24px_rgba(0,0,0,0.08),0_0_20px_rgba(127,191,106,0.15)]"
+              : "border-[#7FBF6A]/50 bg-[#141A15]/95 text-[#E8ECE4] hover:text-white hover:border-[#7FBF6A] hover:bg-[#1A221C] shadow-[0_4px_24px_rgba(0,0,0,0.8),0_0_20px_rgba(127,191,106,0.25)]"
+          }`}
+        >
+          <div
+            className={`flex h-5 w-5 items-center justify-center rounded-full group-hover:scale-110 transition-transform ${
+              isLight ? "bg-[#7FBF6A]/15 text-[#7FBF6A]" : "bg-[#7FBF6A]/20 text-[#7FBF6A]"
+            }`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </div>
+          <span>Node Desk (5 Cards)</span>
+          <ChevronUp
+            className={`h-4 w-4 transition-transform duration-300 text-[#7FBF6A] ${
+              isDrawerOpen ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* ── Sliding Bottom Desk (Draggable 5 Core Cards) ── */}
+      <div
+        className={`canvas-control pointer-events-auto absolute bottom-0 left-0 right-0 z-40 transition-transform duration-300 ease-out ${
+          isDrawerOpen ? "translate-y-0" : "translate-y-full"
+        }`}
+      >
+        <div
+          className={`mx-auto max-w-6xl rounded-t-3xl border-t border-x p-5 backdrop-blur-2xl ${
+            isLight
+              ? "border-[#E2E6E3] bg-[#FAFAF9]/98 shadow-[0_-12px_45px_rgba(0,0,0,0.08)]"
+              : "border-[#243026] bg-[#0E1310]/98 shadow-[0_-12px_45px_rgba(0,0,0,0.9)]"
+          }`}
+        >
+          {/* Desk Header */}
+          <div
+            className={`flex items-center justify-between pb-3 mb-4 border-b ${
+              isLight ? "border-[#EFF2EE]" : "border-[#243026]"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#7FBF6A]/30 bg-[#7FBF6A]/10 text-[#7FBF6A]">
+                <Layers className="h-4 w-4" />
+              </div>
+              <div>
+                <h3
+                  className={`text-sm font-bold ${isLight ? "text-[#111814]" : "text-[#E8ECE4]"}`}
+                >
+                  ChronoGraph Node Desk — 5 Core Cards
+                </h3>
+                <p
+                  className={`text-[11px] font-mono ${isLight ? "text-[#667268]" : "text-[#8B968B]"}`}
+                >
+                  Drag any card onto the canvas or click to add • Connect right dot → left dot to join
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsDrawerOpen(false)}
+              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+                isLight
+                  ? "border-[#E2E6E3] bg-[#F0F2F0] text-[#667268] hover:text-[#111814] hover:border-[#7FBF6A]/40"
+                  : "border-[#243026] bg-[#141A15] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40"
+              }`}
+              title="Close Desk"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* 5 Core Cards with HTML5 Drag & Drop */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            {CORE_NODE_TEMPLATES.map((tmpl) => (
+              <div
+                key={tmpl.type}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("application/chronograph-node-type", tmpl.type);
+                  e.dataTransfer.setData("text/plain", tmpl.type);
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
+                onClick={() => addNodeToCanvas(tmpl)}
+                className={`group relative flex flex-col justify-between rounded-2xl border p-3.5 transition-all duration-150 cursor-grab active:cursor-grabbing active:scale-95 ${
+                  isLight
+                    ? "border-[#E2E6E3] bg-[#FFFFFF]/90 hover:border-[#7FBF6A] hover:bg-[#FFFFFF] shadow-sm hover:shadow-md"
+                    : "border-[#243026] bg-[#141A15]/95 hover:border-[#7FBF6A] hover:bg-[#1A221C] shadow-lg hover:shadow-[0_8px_25px_rgba(0,0,0,0.6)]"
+                }`}
+              >
+                <div>
+                  <div
+                    className={`flex items-center justify-between pb-2 mb-2 border-b ${
+                      isLight ? "border-[#EFF2EE]" : "border-[#243026]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
+                          isLight ? "border-[#E2E6E3] bg-[#F7F8F7]" : "border-[#243026] bg-[#0C100D]"
+                        }`}
+                      >
+                        {getNodeIcon(tmpl.type)}
+                      </div>
+                      <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#7FBF6A]">
+                        {tmpl.badge}
+                      </span>
+                    </div>
+
+                    <span className="flex items-center gap-1 font-mono text-[9px] font-bold group-hover:translate-x-0.5 transition-transform text-[#7FBF6A]">
+                      <Plus className="h-3 w-3" />
+                      <span>Add</span>
+                    </span>
+                  </div>
+
+                  <h4
+                    className={`text-xs font-semibold group-hover:text-[#7FBF6A] transition-colors truncate ${
+                      isLight ? "text-[#111814]" : "text-[#E8ECE4]"
+                    }`}
+                  >
+                    {tmpl.name}
+                  </h4>
+                  <p
+                    className={`mt-0.5 text-[10px] font-mono truncate ${
+                      isLight ? "text-[#667268]" : "text-[#8B968B]"
+                    }`}
+                  >
+                    {tmpl.detail}
+                  </p>
+                  <p
+                    className={`mt-1 text-[10px] line-clamp-2 leading-relaxed ${
+                      isLight ? "text-[#667268]/80" : "text-[#8B968B]/70"
+                    }`}
+                  >
+                    {tmpl.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
