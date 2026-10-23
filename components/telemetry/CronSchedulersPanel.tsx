@@ -26,7 +26,8 @@ interface CronSchedulerItem {
   totalRunsCount: number;
 }
 
-export function CronSchedulersPanel() {
+export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "light" }) {
+  const isLight = theme === "light";
   const [schedulers, setSchedulers] = useState<CronSchedulerItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -159,21 +160,41 @@ export function CronSchedulersPanel() {
   };
 
   return (
-    <div className="liquid-glass rounded-2xl overflow-hidden border border-[#243026] bg-[#141A15]/90">
+    <div
+      className={`liquid-glass rounded-2xl overflow-hidden border ${
+        isLight
+          ? "border-[#D1D9D0] bg-[#FAFAF9]/90 shadow-sm"
+          : "border-[#243026] bg-[#141A15]/90 shadow-md"
+      }`}
+    >
       {/* Panel Header */}
-      <div className="relative z-10 p-5 border-b border-[#243026] flex flex-wrap items-center justify-between gap-4">
+      <div
+        className={`relative z-10 p-5 border-b flex flex-wrap items-center justify-between gap-4 ${
+          isLight ? "border-[#D1D9D0] bg-white/40" : "border-[#243026]"
+        }`}
+      >
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7FBF6A]/10 border border-[#7FBF6A]/20 text-[#7FBF6A]">
             <Clock className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-[#E8ECE4]">BullMQ Repeatable Cron Schedulers</h3>
+              <h3
+                className={`text-sm font-bold ${
+                  isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+                }`}
+              >
+                BullMQ Repeatable Cron Schedulers
+              </h3>
               <span className="rounded-full bg-[#7FBF6A]/15 px-2 py-0.5 text-[10px] font-mono font-semibold text-[#7FBF6A] border border-[#7FBF6A]/30">
                 Phase 2 // T2.5 Live
               </span>
             </div>
-            <p className="text-xs text-[#8B968B] mt-0.5">
+            <p
+              className={`text-xs mt-0.5 ${
+                isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+              }`}
+            >
               Workflows triggered deterministically via BullMQ <code className="text-[#7FBF6A] font-mono">queue.upsertJobScheduler</code> on Redis.
             </p>
           </div>
@@ -184,7 +205,11 @@ export function CronSchedulersPanel() {
             onClick={fetchSchedulers}
             disabled={isRefreshing}
             type="button"
-            className="flex items-center gap-1.5 rounded-lg border border-[#243026] bg-[#0C100D] px-3 py-1.5 text-xs font-mono text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40 transition cursor-pointer"
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-mono transition cursor-pointer ${
+              isLight
+                ? "border-[#D1D9D0] bg-white text-[#141A15] hover:border-[#7FBF6A]"
+                : "border-[#243026] bg-[#0C100D] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40"
+            }`}
             title="Refresh BullMQ Schedulers"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-[#7FBF6A]" : ""}`} />
@@ -194,7 +219,7 @@ export function CronSchedulersPanel() {
           <button
             onClick={() => setShowAddForm(!showAddForm)}
             type="button"
-            className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] px-3.5 py-1.5 text-xs font-mono font-bold text-[#0C100D] transition cursor-pointer shadow-[0_0_15px_rgba(127,191,106,0.25)]"
+            className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] px-3.5 py-1.5 text-xs font-mono font-bold text-[#0C100D] transition-all cursor-pointer shadow-[0_0_15px_rgba(127,191,106,0.25)] active:scale-95"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>{showAddForm ? "Close Form" : "Schedule Workflow"}</span>
@@ -230,15 +255,30 @@ export function CronSchedulersPanel() {
 
       {/* Add / Schedule Workflow Form Drawer */}
       {showAddForm && (
-        <form onSubmit={handleCreateOrUpdate} className="p-5 border-b border-[#243026] bg-[#0C100D]/70 space-y-4">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#E8ECE4]">
+        <form
+          onSubmit={handleCreateOrUpdate}
+          className={`p-5 border-b space-y-4 ${
+            isLight
+              ? "border-[#D1D9D0] bg-[#F3F6F2]"
+              : "border-[#243026] bg-[#0C100D]/70"
+          }`}
+        >
+          <div
+            className={`flex items-center gap-2 text-xs font-semibold ${
+              isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+            }`}
+          >
             <Calendar className="h-4 w-4 text-[#7FBF6A]" />
             <span>Register BullMQ Repeatable Job Scheduler</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[11px] font-mono text-[#8B968B] mb-1">
+              <label
+                className={`block text-[11px] font-mono mb-1 ${
+                  isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                }`}
+              >
                 Workflow Blueprint (UUID or Select)
               </label>
               <input
@@ -247,12 +287,20 @@ export function CronSchedulersPanel() {
                 value={selectedWorkflowId}
                 onChange={(e) => setSelectedWorkflowId(e.target.value)}
                 placeholder="e.g. 9b2156d7-0162-4290-..."
-                className="w-full rounded-xl border border-[#243026] bg-[#141A15] px-3.5 py-2 text-xs font-mono text-[#E8ECE4] focus:outline-none focus:border-[#7FBF6A]"
+                className={`w-full rounded-xl border px-3.5 py-2 text-xs font-mono focus:outline-none focus:border-[#7FBF6A] ${
+                  isLight
+                    ? "border-[#D1D9D0] bg-white text-[#141A15]"
+                    : "border-[#243026] bg-[#141A15] text-[#E8ECE4]"
+                }`}
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-mono text-[#8B968B] mb-1">
+              <label
+                className={`block text-[11px] font-mono mb-1 ${
+                  isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                }`}
+              >
                 Standard 5-Field Cron Pattern
               </label>
               <div className="flex gap-2">
@@ -262,12 +310,16 @@ export function CronSchedulersPanel() {
                   value={cronPattern}
                   onChange={(e) => setCronPattern(e.target.value)}
                   placeholder="*/5 * * * *"
-                  className="flex-1 rounded-xl border border-[#243026] bg-[#141A15] px-3.5 py-2 text-xs font-mono text-[#E8ECE4] focus:outline-none focus:border-[#7FBF6A]"
+                  className={`flex-1 rounded-xl border px-3.5 py-2 text-xs font-mono focus:outline-none focus:border-[#7FBF6A] ${
+                    isLight
+                      ? "border-[#D1D9D0] bg-white text-[#141A15]"
+                      : "border-[#243026] bg-[#141A15] text-[#E8ECE4]"
+                  }`}
                 />
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="rounded-xl border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] px-4 py-2 text-xs font-mono font-bold text-[#0C100D] transition cursor-pointer disabled:opacity-50"
+                  className="rounded-xl border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] px-4 py-2 text-xs font-mono font-bold text-[#0C100D] transition-all cursor-pointer disabled:opacity-50 active:scale-95"
                 >
                   {isSubmitting ? "Registering..." : "Upsert Schedule"}
                 </button>
@@ -275,7 +327,11 @@ export function CronSchedulersPanel() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px] font-mono text-[#8B968B]">
+          <div
+            className={`flex flex-wrap items-center gap-2 pt-1 text-[10px] font-mono ${
+              isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+            }`}
+          >
             <span>Presets:</span>
             {[
               { label: "Every 1 min", val: "* * * * *" },
@@ -288,7 +344,11 @@ export function CronSchedulersPanel() {
                 key={p.val}
                 type="button"
                 onClick={() => setCronPattern(p.val)}
-                className="px-2 py-0.5 rounded border border-[#243026] bg-[#141A15] hover:border-[#7FBF6A]/50 hover:text-[#E8ECE4] transition cursor-pointer"
+                className={`px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                  isLight
+                    ? "border-[#D1D9D0] bg-white text-[#141A15] hover:border-[#7FBF6A]"
+                    : "border-[#243026] bg-[#141A15] text-[#8B968B] hover:border-[#7FBF6A]/50 hover:text-[#E8ECE4]"
+                }`}
               >
                 {p.label}
               </button>
@@ -300,12 +360,22 @@ export function CronSchedulersPanel() {
       {/* Active Schedulers List */}
       <div className="p-5">
         {isLoading ? (
-          <div className="py-8 text-center text-xs font-mono text-[#8B968B]">
+          <div
+            className={`py-8 text-center text-xs font-mono ${
+              isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+            }`}
+          >
             Loading BullMQ schedulers from Redis...
           </div>
         ) : schedulers.length === 0 ? (
           <div className="py-8 text-center space-y-2">
-            <p className="text-xs font-mono text-[#8B968B]">No active repeatable BullMQ schedulers found.</p>
+            <p
+              className={`text-xs font-mono ${
+                isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+              }`}
+            >
+              No active repeatable BullMQ schedulers found.
+            </p>
             <button
               onClick={() => setShowAddForm(true)}
               className="inline-flex items-center gap-1.5 text-xs text-[#7FBF6A] hover:underline font-mono cursor-pointer"
@@ -322,26 +392,46 @@ export function CronSchedulersPanel() {
               return (
                 <div
                   key={job.schedulerId}
-                  className="rounded-xl border border-[#243026] bg-[#0C100D]/70 p-4 transition-all hover:border-[#7FBF6A]/40 flex flex-wrap items-center justify-between gap-4"
+                  className={`rounded-xl border p-4 transition-all flex flex-wrap items-center justify-between gap-4 ${
+                    isLight
+                      ? "border-[#D1D9D0] bg-white hover:border-[#7FBF6A]/60 shadow-xs"
+                      : "border-[#243026] bg-[#0C100D]/70 hover:border-[#7FBF6A]/40 shadow-xs"
+                  }`}
                 >
                   {/* Left: Workflow & Cron Details */}
                   <div className="space-y-1.5 min-w-[280px]">
                     <div className="flex items-center gap-2.5">
                       <span className="h-2 w-2 rounded-full bg-[#7FBF6A] animate-pulse" />
-                      <h4 className="text-sm font-bold text-[#E8ECE4]">{job.workflowName}</h4>
+                      <h4
+                        className={`text-sm font-bold ${
+                          isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+                        }`}
+                      >
+                        {job.workflowName}
+                      </h4>
                       <span className="rounded bg-[#7FBF6A]/15 border border-[#7FBF6A]/30 px-2 py-0.5 text-[10px] font-mono font-semibold text-[#7FBF6A]">
                         {job.cronExpression}
                       </span>
                     </div>
 
-                    <p className="text-[11px] font-mono text-[#8B968B] max-w-xl">
+                    <p
+                      className={`text-[11px] font-mono max-w-xl ${
+                        isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                      }`}
+                    >
                       {job.description || `Scheduler ID: ${job.schedulerId}`}
                     </p>
 
-                    <div className="flex flex-wrap items-center gap-3 text-[10px] font-mono text-[#8B968B] pt-1">
+                    <div
+                      className={`flex flex-wrap items-center gap-3 text-[10px] font-mono pt-1 ${
+                        isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                      }`}
+                    >
                       <span>
                         Next Run:{" "}
-                        <strong className="text-[#E8ECE4]">
+                        <strong
+                          className={isLight ? "text-[#141A15]" : "text-[#E8ECE4]"}
+                        >
                           {job.nextRunAt ? new Date(job.nextRunAt).toLocaleString() : "Pending"}
                         </strong>
                       </span>
@@ -360,7 +450,7 @@ export function CronSchedulersPanel() {
                       onClick={() => handleTriggerNow(job.workflowId, job.workflowName)}
                       disabled={isTriggering}
                       type="button"
-                      className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A]/15 hover:bg-[#7FBF6A] text-[#7FBF6A] hover:text-[#0C100D] px-3.5 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer disabled:opacity-50"
+                      className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A]/15 hover:bg-[#7FBF6A] text-[#7FBF6A] hover:text-[#0C100D] px-3.5 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer disabled:opacity-50 active:scale-95"
                       title="Trigger workflow execution immediately via Cron Trigger runner"
                     >
                       <Play className={`h-3 w-3 fill-current ${isTriggering ? "animate-spin" : ""}`} />
@@ -370,7 +460,11 @@ export function CronSchedulersPanel() {
                     <button
                       onClick={() => handleRemoveScheduler(job.workflowId, job.workflowName)}
                       type="button"
-                      className="flex items-center justify-center h-8 w-8 rounded-lg border border-[#243026] text-[#8B968B] hover:text-red-400 hover:border-red-500/40 hover:bg-red-500/10 transition cursor-pointer"
+                      className={`flex items-center justify-center h-8 w-8 rounded-lg border transition-all cursor-pointer hover:text-[#E5735C] hover:border-[#E5735C]/40 hover:bg-[#E5735C]/10 active:scale-95 ${
+                        isLight
+                          ? "border-[#D1D9D0] text-[#5E695E] bg-white"
+                          : "border-[#243026] text-[#8B968B] bg-[#0C100D]"
+                      }`}
                       title="Unregister BullMQ Repeatable Job"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -384,12 +478,18 @@ export function CronSchedulersPanel() {
       </div>
 
       {/* Footer / Telemetry Note */}
-      <div className="px-5 py-3 border-t border-[#243026] bg-[#0C100D]/50 flex items-center justify-between text-[10px] font-mono text-[#8B968B]">
+      <div
+        className={`px-5 py-3 border-t flex items-center justify-between text-[10px] font-mono ${
+          isLight
+            ? "border-[#D1D9D0] bg-white/50 text-[#5E695E]"
+            : "border-[#243026] bg-[#0C100D]/50 text-[#8B968B]"
+        }`}
+      >
         <div className="flex items-center gap-1.5">
           <Sparkles className="h-3 w-3 text-[#7FBF6A]" />
           <span>BullMQ v6 Repeatable Job Engine • Atomic Redis In-Degree Seeding</span>
         </div>
-        <span>REST Endpoint: <code className="text-[#E8ECE4]">/api/v1/cron/schedulers</code></span>
+        <span>REST Endpoint: <code className={isLight ? "text-[#141A15]" : "text-[#E8ECE4]"}>/api/v1/cron/schedulers</code></span>
       </div>
     </div>
   );
