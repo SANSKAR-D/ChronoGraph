@@ -1,5 +1,5 @@
 import { Queue, QueueOptions } from "bullmq";
-import { createRedisConnection } from "@/lib/redis/client";
+import { createRedisConnection } from "../redis/client";
 
 // Core Queue Identifiers across ChronoGraph
 export const QUEUE_NAMES = {
@@ -15,6 +15,10 @@ function getQueueOptions(): QueueOptions {
   return {
     connection: createRedisConnection(),
     defaultJobOptions: {
+      attempts: 3,
+      backoff: {
+        type: "exponential-jitter",
+      },
       removeOnComplete: {
         count: 500, // Retain last 500 successful jobs for telemetry
         age: 86400, // 24 hours
@@ -51,6 +55,16 @@ export function getDagExecutionQueue(): Queue {
     globalForQueues.dagQueue = new Queue(QUEUE_NAMES.DAG_EXECUTION, getQueueOptions());
   }
   return globalForQueues.dagQueue;
+}
+
+/**
+ * Returns the BullMQ Queue dedicated to permanently failed dead-letter jobs.
+ */
+export function getDeadLetterQueue(): Queue {
+  if (!globalForQueues.dlqQueue) {
+    globalForQueues.dlqQueue = new Queue(QUEUE_NAMES.DEAD_LETTER, getQueueOptions());
+  }
+  return globalForQueues.dlqQueue;
 }
 
 /**

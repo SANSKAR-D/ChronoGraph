@@ -27,9 +27,15 @@
   - [ ] `executeHttpNode`: Outbound `fetch` with timeout, custom headers, `X-Idempotency-Key` injection, and template variable replacement (`{{node_1.data.userId}}`)[cite: 8, 18].
   - [ ] `executeTransformNode`: Safe JSON path mapping / filtering[cite: 8, 18].
   - [ ] `executeDelayNode`: Non-blocking BullMQ delayed transition[cite: 8, 18].
+<<<<<<< HEAD
+- [x] **T3.3 (Exponential Backoff + Full Jitter):** Configure BullMQ custom backoff strategy: `Math.floor(Math.random() * Math.min(maxCap, base * Math.pow(2, attempt)))`[cite: 8, 18].
+- [x] **T3.4 (Dead-Letter Queue Routing):** Hook into BullMQ `failed` event; when `job.attemptsMade >= job.opts.attempts`, persist failure context to `dead_letter_jobs`, mark downstream dependent nodes as `SKIPPED/HALTED`, and publish `DLQ_ROUTED` event[cite: 8, 18].
+- [ ] **T3.5 (DLQ Replay Endpoint):** Create `POST /api/v1/dlq/[jobId]/replay` to re-inject a fixed job back into the topological execution flow[cite: 8, 18].
+=======
 - [ ] **T3.3 (Exponential Backoff + Full Jitter):** Configure BullMQ custom backoff strategy: `Math.floor(Math.random() * Math.min(maxCap, base * Math.pow(2, attempt)))`[cite: 8, 18].
 - [ ] **T3.4 (Dead-Letter Queue Routing):** Hook into BullMQ `failed` event; when `job.attemptsMade >= job.opts.attempts`, persist failure context to `dead_letter_jobs`, mark downstream dependent nodes as `SKIPPED/HALTED`, and publish `DLQ_ROUTED` event[cite: 8, 18].
 - [x] **T3.5 (DLQ Replay Endpoint):** Create `POST /api/v1/dlq/[jobId]/replay` to re-inject a fixed job back into the topological execution flow[cite: 8, 18].
+>>>>>>> a528cf9c5895780c2135284c257ef2ec88b92e02
 
 ---
 

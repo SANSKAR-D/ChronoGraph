@@ -47,7 +47,7 @@ export default function ChronoGraphApp() {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 120, opacity: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 25 }}
-            className="fixed top-24 right-6 z-40 pointer-events-auto"
+            className="fixed top-20 right-4 z-30 pointer-events-auto scale-75 origin-top-right md:scale-80"
           >
             <PullCord
               checked={theme === "light"}

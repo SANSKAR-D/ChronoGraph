@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   AlertTriangle,
   RotateCw,
@@ -63,6 +63,19 @@ export function DLQView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   ]);
 
   const [notification, setNotification] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/v1/dlq")
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        if (data.success && Array.isArray(data.jobs) && data.jobs.length > 0) {
+          setJobs(data.jobs);
+        }
+      })
+      .catch(() => {
+        // Keeps default demo entries if DB is empty or during offline test
+      });
+  }, []);
 
   const replayJob = (id: string) => {
     setJobs((prev) =>
