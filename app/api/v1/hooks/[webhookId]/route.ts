@@ -189,7 +189,7 @@ export async function POST(
         workflowId: blueprint.id,
         status: RunStatus.RUNNING,
         triggerType: TriggerSource.WEBHOOK,
-        triggerPayload: parsedPayload,
+        triggerPayload: parsedPayload as any,
       },
     });
 
@@ -238,7 +238,7 @@ export async function POST(
             idempotencyKey,
             status: NodeExecStatus.QUEUED,
             attemptNumber: 1,
-            inputPayload: parsedPayload,
+            inputPayload: parsedPayload as any,
           },
         })
       );

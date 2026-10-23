@@ -22,6 +22,10 @@ import {
   Sparkles,
   AlertTriangle,
   Link2,
+  Settings2,
+  Sliders,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { validateDAG } from "@/lib/dag/cycle-detector";
 
@@ -31,6 +35,18 @@ export type CoreNodeType =
   | "transform_script"
   | "http_request"
   | "delay_timer";
+
+export interface NodeConfig {
+  url?: string;
+  method?: string;
+  maxRetries?: number;
+  baseBackoffMs?: number;
+  maxBackoffCapMs?: number;
+  cronExpression?: string;
+  delayMs?: number;
+  script?: string;
+  headers?: Record<string, string>;
+}
 
 export interface WorkflowNode {
   id: string;
@@ -42,6 +58,7 @@ export interface WorkflowNode {
   badge: string;
   x: number;
   y: number;
+  config?: NodeConfig;
 }
 
 export interface Connection {
@@ -119,6 +136,10 @@ const INITIAL_NODES: WorkflowNode[] = [
     badge: "TRIGGER",
     x: 100,
     y: 200,
+    config: {
+      url: "/api/v1/hooks/orders_settle",
+      method: "POST",
+    },
   },
   {
     id: "cron_1",
@@ -130,6 +151,9 @@ const INITIAL_NODES: WorkflowNode[] = [
     badge: "CRON",
     x: 100,
     y: 380,
+    config: {
+      cronExpression: "0 * * * *",
+    },
   },
   {
     id: "trans_1",
@@ -141,6 +165,9 @@ const INITIAL_NODES: WorkflowNode[] = [
     badge: "TRANSFORM",
     x: 430,
     y: 290,
+    config: {
+      script: "payload.items.map(i => i.id)",
+    },
   },
   {
     id: "http_1",
@@ -152,6 +179,13 @@ const INITIAL_NODES: WorkflowNode[] = [
     badge: "HTTP ACTION",
     x: 760,
     y: 290,
+    config: {
+      url: "https://api.stripe.com/v1/charges",
+      method: "POST",
+      maxRetries: 3,
+      baseBackoffMs: 1000,
+      maxBackoffCapMs: 30000,
+    },
   },
   {
     id: "delay_1",
@@ -163,6 +197,9 @@ const INITIAL_NODES: WorkflowNode[] = [
     badge: "DELAY",
     x: 1090,
     y: 290,
+    config: {
+      delayMs: 5000,
+    },
   },
 ];
 
@@ -179,6 +216,10 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const [connections, setConnections] = useState<Connection[]>(INITIAL_CONNECTIONS);
   const [isRunning, setIsRunning] = useState(false);
   const [activeEdgeIndex, setActiveEdgeIndex] = useState<number>(-1);
+
+  // Selected Node for Node Inspector Drawer (Target URL, Retries, Jitter Backoff)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>("http_1");
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
   // Bottom Drop-Up Sliding Drawer / Desk state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -274,6 +315,29 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
 
     setNodes((prev) => [...prev, newNode]);
     showToast(`Dropped "${template.name}" onto canvas`);
+  };
+
+  // Update configuration parameters for a specific node (Target URL, Retries, Jitter Backoff)
+  const updateNodeConfig = (nodeId: string, updates: Partial<NodeConfig>) => {
+    setNodes((prev) =>
+      prev.map((n) => {
+        if (n.id !== nodeId) return n;
+        const newConfig = { ...n.config, ...updates };
+        let newDetail = n.detail;
+        if (n.type === "http_request" && (updates.method || updates.url)) {
+          newDetail = `${newConfig.method || "POST"} ${newConfig.url || "https://api.stripe.com/v1"}`;
+        } else if (n.type === "cron_trigger" && updates.cronExpression) {
+          newDetail = `${newConfig.cronExpression} (Scheduled)`;
+        } else if (n.type === "delay_timer" && updates.delayMs !== undefined) {
+          newDetail = `Sleep ${newConfig.delayMs}ms // BullMQ ZSET`;
+        }
+        return {
+          ...n,
+          detail: newDetail,
+          config: newConfig,
+        };
+      })
+    );
   };
 
   // Delete a node and its connections
@@ -570,12 +634,12 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
             const target = nodes.find((n) => n.id === conn.to);
             if (!source || !target) return null;
 
-            // Output port: right center of 230px card
-            const sx = source.x + 230;
-            const sy = source.y + 48;
-            // Input port: left center of target card
+            // Output port: right center of header (240px card, 24px from top)
+            const sx = source.x + 240;
+            const sy = source.y + 24;
+            // Input port: left center of header
             const tx = target.x;
-            const ty = target.y + 48;
+            const ty = target.y + 24;
 
             const dx = Math.max(50, Math.abs(tx - sx) * 0.45);
             const pathData = `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
@@ -640,9 +704,9 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           {/* Interactive rubber-band wire when connecting */}
           {connectingFromId && connectingSourceNode && (
             <path
-              d={`M ${connectingSourceNode.x + 230} ${connectingSourceNode.y + 48} C ${
-                connectingSourceNode.x + 230 + 50
-              } ${connectingSourceNode.y + 48}, ${mouseCanvasPos.x - 50} ${mouseCanvasPos.y}, ${
+              d={`M ${connectingSourceNode.x + 240} ${connectingSourceNode.y + 24} C ${
+                connectingSourceNode.x + 240 + 50
+              } ${connectingSourceNode.y + 24}, ${mouseCanvasPos.x - 50} ${mouseCanvasPos.y}, ${
                 mouseCanvasPos.x
               } ${mouseCanvasPos.y}`}
               stroke={isLight ? "#0284C7" : "#38BDF8"}
@@ -658,29 +722,35 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           const isNodeRunning = node.status === "running";
           const isNodeSuccess = node.status === "success";
           const isWiringSource = connectingFromId === node.id;
+          const isSelected = selectedNodeId === node.id;
           const isAvailableTarget =
             connectingFromId !== null && connectingFromId !== node.id && node.category === "action";
 
           return (
             <div
               key={node.id}
+              onClick={() => setSelectedNodeId(node.id)}
               onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-              className={`studio-node absolute w-[230px] rounded-2xl border p-3.5 pointer-events-auto select-none cursor-move transition-shadow duration-150 ${
-                isNodeRunning
+              className={`studio-node absolute w-[240px] rounded-2xl border p-3 pointer-events-auto select-none cursor-move transition-all duration-150 ${
+                isSelected
                   ? isLight
-                    ? "border-[#7FBF6A] bg-[#FFFFFF] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
-                    : "border-[#7FBF6A] bg-[#141A15] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
-                  : isNodeSuccess
+                    ? "border-[#7FBF6A] bg-[#FFFFFF] shadow-[0_0_24px_rgba(127,191,106,0.35)] ring-2 ring-[#7FBF6A]"
+                    : "border-[#7FBF6A] bg-[#141A15] shadow-[0_0_24px_rgba(127,191,106,0.35)] ring-2 ring-[#7FBF6A]"
+                  : isNodeRunning
                     ? isLight
-                      ? "border-[#7FBF6A]/50 bg-[#FFFFFF] shadow-[0_4px_20px_rgba(127,191,106,0.15)]"
-                      : "border-[#7FBF6A]/50 bg-[#141A15] shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
-                    : isWiringSource
+                      ? "border-[#7FBF6A] bg-[#FFFFFF] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
+                      : "border-[#7FBF6A] bg-[#141A15] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
+                    : isNodeSuccess
                       ? isLight
-                        ? "border-cyan-600 bg-cyan-50 shadow-[0_0_24px_rgba(6,182,212,0.3)] ring-2 ring-cyan-500/50"
-                        : "border-cyan-400 bg-[#101718] shadow-[0_0_24px_rgba(56,189,248,0.3)] ring-2 ring-cyan-400/50"
-                      : isLight
-                        ? "border-[#E2E6E3] bg-[#FFFFFF]/98 hover:border-[#7FBF6A]/50 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.05),0_8px_10px_-6px_rgba(0,0,0,0.01)]"
-                        : "border-[#243026] bg-[#141A15]/95 hover:border-[#7FBF6A]/40 shadow-xl"
+                        ? "border-[#7FBF6A]/50 bg-[#FFFFFF] shadow-[0_4px_20px_rgba(127,191,106,0.15)]"
+                        : "border-[#7FBF6A]/50 bg-[#141A15] shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
+                      : isWiringSource
+                        ? isLight
+                          ? "border-cyan-600 bg-cyan-50 shadow-[0_0_24px_rgba(6,182,212,0.3)] ring-2 ring-cyan-500/50"
+                          : "border-cyan-400 bg-[#101718] shadow-[0_0_24px_rgba(56,189,248,0.3)] ring-2 ring-cyan-400/50"
+                        : isLight
+                          ? "border-[#E2E6E3] bg-[#FFFFFF]/98 hover:border-[#7FBF6A]/50 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.05),0_8px_10px_-6px_rgba(0,0,0,0.01)]"
+                          : "border-[#243026] bg-[#141A15]/95 hover:border-[#7FBF6A]/40 shadow-xl"
               }`}
               style={{
                 left: `${node.x}px`,
@@ -693,7 +763,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
               {node.category === "action" && (
                 <div
                   onClick={(e) => handleInputPortClick(e, node.id)}
-                  className={`node-port absolute -left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full border-2 transition-colors cursor-pointer ${
+                  className={`node-port absolute -left-2 top-6 -translate-y-1/2 h-3.5 w-3.5 rounded-full border-2 transition-colors cursor-pointer ${
                     isAvailableTarget
                       ? isLight
                         ? "border-cyan-600 bg-cyan-100 ring-4 ring-cyan-500/40 animate-pulse scale-125"
@@ -709,7 +779,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
               {/* Right Output Port */}
               <div
                 onClick={(e) => handleOutputPortClick(e, node.id)}
-                className={`node-port absolute -right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full border-2 transition-all cursor-pointer ${
+                className={`node-port absolute -right-2 top-6 -translate-y-1/2 h-3.5 w-3.5 rounded-full border-2 transition-all cursor-pointer ${
                   isWiringSource
                     ? isLight
                       ? "border-cyan-600 bg-cyan-100 ring-4 ring-cyan-500/40 animate-pulse scale-125"
@@ -740,22 +810,41 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   {isNodeRunning ? (
-                    <span className="relative flex h-2 w-2">
+                    <span className="relative flex h-2 w-2 mr-1">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-[#7FBF6A]" />
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-[#7FBF6A]" />
                     </span>
                   ) : isNodeSuccess ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#7FBF6A]" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#7FBF6A] mr-1" />
                   ) : null}
+
+                  {/* Settings / Inspect Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedNodeId(node.id === selectedNodeId ? null : node.id);
+                    }}
+                    className={`p-1 rounded-md transition-colors cursor-pointer ${
+                      isSelected
+                        ? "text-[#7FBF6A] bg-[#7FBF6A]/15"
+                        : isLight
+                          ? "text-[#667268] hover:text-[#111814] hover:bg-[#F0F2F0]"
+                          : "text-[#8B968B] hover:text-[#E8ECE4] hover:bg-[#243026]"
+                    }`}
+                    title="Inspect Node Parameters (Target URL, Retries, Jitter Backoff)"
+                  >
+                    <Settings2 className="h-3 w-3" />
+                  </button>
 
                   <button
                     type="button"
                     onClick={(e) => deleteNode(node.id, e)}
                     className={`${
                       isLight ? "text-[#667268] hover:text-rose-600" : "text-[#8B968B] hover:text-rose-400"
-                    } transition-colors cursor-pointer p-0.5`}
+                    } transition-colors cursor-pointer p-1 rounded-md`}
                     title="Remove node"
                   >
                     <Trash2 className="h-3 w-3" />
@@ -779,6 +868,128 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
                 >
                   {node.detail}
                 </p>
+
+                {/* HTTP Request specific interactive parameters */}
+                {node.type === "http_request" && (
+                  <div className="mt-2.5 space-y-2 pt-2 border-t border-[#243026]/70">
+                    {/* Target URL */}
+                    <div className="rounded-xl bg-[#0C100D]/90 p-2 border border-[#243026]">
+                      <div className="flex items-center justify-between text-[8px] font-mono text-[#8B968B] mb-1">
+                        <span className="font-bold tracking-wider text-[#7FBF6A]">TARGET URL</span>
+                        <span className="rounded bg-[#7FBF6A]/20 px-1 py-0.2 text-[8px] font-bold text-[#7FBF6A]">
+                          {node.config?.method || "POST"}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={node.config?.url || "https://api.stripe.com/v1/charges"}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => updateNodeConfig(node.id, { url: e.target.value })}
+                        className="w-full bg-transparent font-mono text-[9.5px] text-[#E8ECE4] focus:text-[#7FBF6A] outline-none truncate"
+                        placeholder="https://api.domain.com/v1"
+                        title="Click to edit Target Endpoint URL"
+                      />
+                    </div>
+
+                    {/* Max Retries & Base Interval Steppers */}
+                    <div className="grid grid-cols-2 gap-1.5 font-mono text-[9px]">
+                      {/* Max Retries */}
+                      <div className="rounded-xl bg-[#0C100D]/90 p-1.5 border border-[#243026]">
+                        <div className="text-[7.5px] uppercase font-bold text-[#8B968B]">Max Retries</div>
+                        <div className="flex items-center justify-between mt-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateNodeConfig(node.id, {
+                                maxRetries: Math.max(0, (node.config?.maxRetries ?? 3) - 1),
+                              });
+                            }}
+                            className="h-4 w-4 rounded bg-[#243026] hover:bg-[#7FBF6A] hover:text-[#0C100D] text-[10px] font-bold flex items-center justify-center transition-colors cursor-pointer select-none"
+                            title="Decrease Max Retries"
+                          >
+                            -
+                          </button>
+                          <span className="font-bold text-[#7FBF6A] text-[10px]">
+                            {node.config?.maxRetries ?? 3}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateNodeConfig(node.id, {
+                                maxRetries: Math.min(10, (node.config?.maxRetries ?? 3) + 1),
+                              });
+                            }}
+                            className="h-4 w-4 rounded bg-[#243026] hover:bg-[#7FBF6A] hover:text-[#0C100D] text-[10px] font-bold flex items-center justify-center transition-colors cursor-pointer select-none"
+                            title="Increase Max Retries"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Base Interval */}
+                      <div className="rounded-xl bg-[#0C100D]/90 p-1.5 border border-[#243026]">
+                        <div className="text-[7.5px] uppercase font-bold text-[#8B968B]">Base Interval</div>
+                        <div className="flex items-center justify-between mt-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateNodeConfig(node.id, {
+                                baseBackoffMs: Math.max(100, (node.config?.baseBackoffMs ?? 1000) - 250),
+                              });
+                            }}
+                            className="h-4 w-4 rounded bg-[#243026] hover:bg-[#7FBF6A] hover:text-[#0C100D] text-[10px] font-bold flex items-center justify-center transition-colors cursor-pointer select-none"
+                            title="Decrease Base Interval"
+                          >
+                            -
+                          </button>
+                          <span className="font-bold text-[#7FBF6A] text-[10px]">
+                            {node.config?.baseBackoffMs ?? 1000}ms
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateNodeConfig(node.id, {
+                                baseBackoffMs: (node.config?.baseBackoffMs ?? 1000) + 250,
+                              });
+                            }}
+                            className="h-4 w-4 rounded bg-[#243026] hover:bg-[#7FBF6A] hover:text-[#0C100D] text-[10px] font-bold flex items-center justify-center transition-colors cursor-pointer select-none"
+                            title="Increase Base Interval"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* T3.3 Full Jitter & T3.4 DLQ Badges */}
+                    <div className="flex items-center justify-between pt-0.5 text-[8px] font-mono">
+                      <span className="text-[#7FBF6A] font-semibold flex items-center gap-1">
+                        <Zap className="h-2.5 w-2.5" /> Full Jitter
+                      </span>
+                      <span className="text-[#E5735C] font-semibold flex items-center gap-1">
+                        <ShieldCheck className="h-2.5 w-2.5" /> DLQ Routing
+                      </span>
+                    </div>
+
+                    {/* Open Inspector Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedNodeId(node.id);
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-[#7FBF6A]/30 bg-[#7FBF6A]/10 py-1 text-[9px] font-mono font-bold text-[#7FBF6A] hover:bg-[#7FBF6A]/20 transition-all cursor-pointer"
+                    >
+                      <Settings2 className="h-3 w-3" />
+                      <span>Configure Parameters & Formula</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -816,6 +1027,29 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         >
           <Play className={`h-3.5 w-3.5 fill-current ${isRunning ? "animate-pulse" : ""}`} />
           <span>{isRunning ? "Executing..." : "Execute Workflow"}</span>
+        </button>
+
+        <div className={`h-4 w-[1px] ${isLight ? "bg-[#E2E6E3]" : "bg-[#243026]"}`} />
+
+        {/* Node Parameter Inspector Quick Toggle */}
+        <button
+          onClick={() => setSelectedNodeId(selectedNodeId === "http_1" ? null : "http_1")}
+          type="button"
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 ${
+            selectedNodeId === "http_1"
+              ? "border-[#7FBF6A] bg-[#7FBF6A]/20 text-[#7FBF6A] shadow-[0_0_12px_rgba(127,191,106,0.25)]"
+              : isLight
+                ? "border-[#E2E6E3] bg-[#F0F2F0] text-[#667268] hover:text-[#111814]"
+                : "border-[#243026] bg-[#0C100D] text-[#8B968B] hover:text-[#E8ECE4]"
+          }`}
+          title="Toggle Node Configuration Inspector (Target URL, Retries, Jitter Backoff)"
+        >
+          <Settings2 className="h-3.5 w-3.5 text-[#7FBF6A]" />
+          <span>
+            {selectedNodeId === "http_1" ? "Hide Inspector" : "Node Inspector"} (Retries:{" "}
+            {nodes.find((n) => n.id === "http_1")?.config?.maxRetries ?? 3} | Base:{" "}
+            {nodes.find((n) => n.id === "http_1")?.config?.baseBackoffMs ?? 1000}ms)
+          </span>
         </button>
       </div>
 
@@ -1054,6 +1288,288 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           </div>
         </div>
       </div>
+
+      {/* ── Floating Node Inspector Button when Drawer Closed ── */}
+      {!selectedNode && (
+        <button
+          onClick={() => setSelectedNodeId("http_1")}
+          className={`canvas-control pointer-events-auto fixed top-20 right-6 z-40 flex items-center gap-2.5 rounded-2xl border px-3.5 py-2 shadow-2xl backdrop-blur-md transition-all cursor-pointer select-none hover:scale-105 active:scale-95 ${
+            isLight
+              ? "border-[#7FBF6A]/50 bg-white/95 text-[#111814] shadow-[0_10px_30px_rgba(0,0,0,0.1)]"
+              : "border-[#7FBF6A]/50 bg-[#141A15]/95 text-[#E8ECE4] shadow-[0_10px_30px_rgba(0,0,0,0.8)]"
+          }`}
+          title="Open Node Configuration Inspector (Target URL, Retries, Jitter Backoff)"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-[#7FBF6A]/20 text-[#7FBF6A]">
+            <Settings2 className="h-4 w-4" />
+          </div>
+          <div className="text-left font-mono">
+            <div className="text-[11px] font-bold text-[#7FBF6A] flex items-center gap-1">
+              <span>Node Parameters</span>
+              <span className="rounded bg-[#7FBF6A]/20 px-1 text-[8px]">T3.3/T3.4</span>
+            </div>
+            <div className="text-[9px] text-[#8B968B]">HTTP: Retries & Base Interval</div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Right: Node Configuration Inspector Drawer (T5.4 & T3.3/T3.4 Visualizer) ── */}
+      {selectedNode && (
+        <div
+          className={`canvas-control pointer-events-auto fixed top-20 right-6 z-50 w-[420px] max-h-[calc(100vh-120px)] overflow-y-auto rounded-3xl border p-5 shadow-2xl backdrop-blur-2xl ring-1 ring-[#7FBF6A]/30 animate-in fade-in slide-in-from-right-4 duration-150 ${
+            isLight
+              ? "border-[#E2E6E3] bg-[#FFFFFF]/98 text-[#111814] shadow-[0_20px_50px_rgba(0,0,0,0.15)]"
+              : "border-[#243026] bg-[#141A15]/98 text-[#E8ECE4] shadow-[0_25px_60px_rgba(0,0,0,0.9)]"
+          }`}
+          style={{
+            scrollbarWidth: "thin",
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between pb-3 mb-4 border-b border-inherit">
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`flex h-8 w-8 items-center justify-center rounded-xl border ${
+                  isLight ? "border-[#E2E6E3] bg-[#F7F8F7]" : "border-[#243026] bg-[#0C100D]"
+                }`}
+              >
+                {getNodeIcon(selectedNode.type)}
+              </div>
+              <div>
+                <h3 className="text-sm font-bold tracking-tight">{selectedNode.name}</h3>
+                <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#7FBF6A]">
+                  {selectedNode.badge} • CONFIG
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSelectedNodeId(null)}
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                isLight
+                  ? "border-[#E2E6E3] text-[#667268] hover:text-[#111814] hover:bg-[#F0F2F0]"
+                  : "border-[#243026] text-[#8B968B] hover:text-[#E8ECE4] hover:bg-[#1A221C]"
+              }`}
+              title="Close Inspector"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Form Content */}
+          <div className="space-y-4 text-xs">
+            {selectedNode.type === "http_request" && (
+              <>
+                {/* Target URL */}
+                <div>
+                  <label className="block text-[11px] font-mono font-semibold text-[#8B968B] mb-1.5">
+                    Target Endpoint URL
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedNode.config?.method || "POST"}
+                      onChange={(e) => updateNodeConfig(selectedNode.id, { method: e.target.value })}
+                      className={`rounded-xl border px-2.5 py-2 font-mono text-xs font-bold ${
+                        isLight
+                          ? "border-[#E2E6E3] bg-[#F7F8F7] text-[#111814]"
+                          : "border-[#243026] bg-[#0C100D] text-[#7FBF6A]"
+                      }`}
+                    >
+                      <option>POST</option>
+                      <option>GET</option>
+                      <option>PUT</option>
+                      <option>DELETE</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={selectedNode.config?.url || "https://api.stripe.com/v1/charges"}
+                      onChange={(e) => updateNodeConfig(selectedNode.id, { url: e.target.value })}
+                      placeholder="https://api.example.com/v1"
+                      className={`flex-1 rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#7FBF6A] transition-colors ${
+                        isLight
+                          ? "border-[#E2E6E3] bg-[#F7F8F7] text-[#111814]"
+                          : "border-[#243026] bg-[#0C100D] text-[#E8ECE4]"
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Retry Cap & Base Interval (T3.3) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-mono font-semibold text-[#8B968B] mb-1.5">
+                      Max Retries (0-10)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={10}
+                      value={selectedNode.config?.maxRetries ?? 3}
+                      onChange={(e) =>
+                        updateNodeConfig(selectedNode.id, {
+                          maxRetries: Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)),
+                        })
+                      }
+                      className={`w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#7FBF6A] transition-colors ${
+                        isLight
+                          ? "border-[#E2E6E3] bg-[#F7F8F7] text-[#111814]"
+                          : "border-[#243026] bg-[#0C100D] text-[#E8ECE4]"
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono font-semibold text-[#8B968B] mb-1.5">
+                      Base Interval (ms)
+                    </label>
+                    <input
+                      type="number"
+                      step={100}
+                      value={selectedNode.config?.baseBackoffMs ?? 1000}
+                      onChange={(e) =>
+                        updateNodeConfig(selectedNode.id, {
+                          baseBackoffMs: Math.max(100, parseInt(e.target.value, 10) || 1000),
+                        })
+                      }
+                      className={`w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#7FBF6A] transition-colors ${
+                        isLight
+                          ? "border-[#E2E6E3] bg-[#F7F8F7] text-[#111814]"
+                          : "border-[#243026] bg-[#0C100D] text-[#E8ECE4]"
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Max Backoff Cap */}
+                <div>
+                  <label className="block text-[11px] font-mono font-semibold text-[#8B968B] mb-1.5">
+                    Max Backoff Cap (ms)
+                  </label>
+                  <input
+                    type="number"
+                    step={1000}
+                    value={selectedNode.config?.maxBackoffCapMs ?? 30000}
+                    onChange={(e) =>
+                      updateNodeConfig(selectedNode.id, {
+                        maxBackoffCapMs: Math.max(1000, parseInt(e.target.value, 10) || 30000),
+                      })
+                    }
+                    className={`w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#7FBF6A] transition-colors ${
+                      isLight
+                        ? "border-[#E2E6E3] bg-[#F7F8F7] text-[#111814]"
+                        : "border-[#243026] bg-[#0C100D] text-[#E8ECE4]"
+                    }`}
+                  />
+                </div>
+
+                {/* T3.3 Full Jitter Strategy Callout */}
+                <div
+                  className={`rounded-2xl border p-3 font-mono text-[11px] ${
+                    isLight ? "border-[#7FBF6A]/30 bg-[#7FBF6A]/10" : "border-[#7FBF6A]/30 bg-[#0C100D]"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-[#7FBF6A] font-bold mb-1">
+                    <Zap className="h-3.5 w-3.5" />
+                    <span>T3.3 BullMQ Backoff Strategy</span>
+                  </div>
+                  <p className="text-[10px] text-[#8B968B] leading-relaxed">
+                    Math.floor(random() × min(cap, base × 2^attempt))
+                  </p>
+                  <div className="mt-2 text-[10px] text-[#7FBF6A] font-bold">
+                    ✓ Full Jitter Enabled (Prevents downstream DDoS)
+                  </div>
+                </div>
+
+                {/* T3.4 DLQ Routing Callout */}
+                <div
+                  className={`rounded-2xl border p-3 font-mono text-[11px] ${
+                    isLight ? "border-[#E5735C]/30 bg-[#E5735C]/10" : "border-[#E5735C]/30 bg-[#0C100D]"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-[#E5735C] font-bold mb-1">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    <span>T3.4 Dead-Letter Queue (DLQ)</span>
+                  </div>
+                  <p className="text-[10px] text-[#8B968B] leading-relaxed">
+                    If attempts ≥ {selectedNode.config?.maxRetries ?? 3}, job routes to DLQ, persists failure context to PostgreSQL, and halts downstream dependent nodes.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* Other node types: webhook, cron, transform, delay */}
+            {selectedNode.type === "webhook_trigger" && (
+              <div>
+                <label className="block text-[11px] font-mono font-semibold text-[#8B968B] mb-1.5">
+                  Webhook Ingestion Path
+                </label>
+                <input
+                  type="text"
+                  value={selectedNode.config?.url || "/api/v1/hooks/orders_settle"}
+                  onChange={(e) => updateNodeConfig(selectedNode.id, { url: e.target.value })}
+                  className={`w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#7FBF6A] ${
+                    isLight ? "border-[#E2E6E3] bg-[#F7F8F7]" : "border-[#243026] bg-[#0C100D]"
+                  }`}
+                />
+                <p className="mt-1 text-[10px] text-[#8B968B]">HMAC-SHA256 signature verification enforced.</p>
+              </div>
+            )}
+
+            {selectedNode.type === "cron_trigger" && (
+              <div>
+                <label className="block text-[11px] font-mono font-semibold text-[#8B968B] mb-1.5">
+                  Cron Expression (5-Field)
+                </label>
+                <input
+                  type="text"
+                  value={selectedNode.config?.cronExpression || "0 * * * *"}
+                  onChange={(e) => updateNodeConfig(selectedNode.id, { cronExpression: e.target.value })}
+                  className={`w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#7FBF6A] ${
+                    isLight ? "border-[#E2E6E3] bg-[#F7F8F7]" : "border-[#243026] bg-[#0C100D]"
+                  }`}
+                />
+                <p className="mt-1 text-[10px] text-[#8B968B]">BullMQ repeatable job scheduler integration.</p>
+              </div>
+            )}
+
+            {selectedNode.type === "delay_timer" && (
+              <div>
+                <label className="block text-[11px] font-mono font-semibold text-[#8B968B] mb-1.5">
+                  Sleep Duration (ms)
+                </label>
+                <input
+                  type="number"
+                  step={500}
+                  value={selectedNode.config?.delayMs ?? 5000}
+                  onChange={(e) =>
+                    updateNodeConfig(selectedNode.id, { delayMs: parseInt(e.target.value, 10) || 5000 })
+                  }
+                  className={`w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#7FBF6A] ${
+                    isLight ? "border-[#E2E6E3] bg-[#F7F8F7]" : "border-[#243026] bg-[#0C100D]"
+                  }`}
+                />
+                <p className="mt-1 text-[10px] text-[#8B968B]">Non-blocking BullMQ ZSET delayed transition.</p>
+              </div>
+            )}
+
+            {selectedNode.type === "transform_script" && (
+              <div>
+                <label className="block text-[11px] font-mono font-semibold text-[#8B968B] mb-1.5">
+                  JSON Path / Mapping Expression
+                </label>
+                <textarea
+                  rows={3}
+                  value={selectedNode.config?.script || "payload.items.map(i => i.id)"}
+                  onChange={(e) => updateNodeConfig(selectedNode.id, { script: e.target.value })}
+                  className={`w-full rounded-xl border p-3 font-mono text-xs outline-none focus:border-[#7FBF6A] ${
+                    isLight ? "border-[#E2E6E3] bg-[#F7F8F7]" : "border-[#243026] bg-[#0C100D]"
+                  }`}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
