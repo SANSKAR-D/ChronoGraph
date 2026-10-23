@@ -9,7 +9,8 @@ interface WorkerNode {
   concurrency: number; cpu: number; memory: string; lastHeartbeat: string;
 }
 
-export function TelemetryView() {
+export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) {
+  const isLight = theme === "light";
   const [streamActive, setStreamActive] = useState(true);
   const [events, setEvents] = useState<Array<{ id: string; time: string; event: string; status: string; latency: number }>>([
     { id: "evt_101", time: "11:20:12", event: "JOB_COMPLETED",        status: "SUCCESS",   latency: 12 },
@@ -43,22 +44,56 @@ export function TelemetryView() {
   }, [streamActive]);
 
   const statusColor = (s: string) =>
-    s === "SUCCESS" ? "text-emerald-400" : s === "RUNNING" ? "text-indigo-400" : s === "HEARTBEAT" ? "text-amber-400" : "text-zinc-400";
+    s === "SUCCESS"
+      ? "text-[#7FBF6A]"
+      : s === "RUNNING"
+      ? isLight
+        ? "text-[#4A8F3F]"
+        : "text-[#92CF7D]"
+      : s === "HEARTBEAT"
+      ? "text-[#E5B86A]"
+      : isLight
+      ? "text-[#5E695E]"
+      : "text-[#8B968B]";
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 pt-24 pb-12 sm:pt-28 sm:px-6 lg:px-8 space-y-8">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-zinc-100 tracking-tight">Cluster Telemetry &amp; SSE Stream</h2>
-          <p className="text-xs text-zinc-500 font-medium">Real-time cluster health, Redis Pub/Sub events, and BullMQ worker metrics.</p>
+          <h2
+            className={`text-xl font-bold tracking-tight ${
+              isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+            }`}
+          >
+            Cluster Telemetry &amp; SSE Stream
+          </h2>
+          <p
+            className={`text-xs font-medium mt-0.5 ${
+              isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+            }`}
+          >
+            Real-time cluster health, Redis Pub/Sub events, and BullMQ worker metrics.
+          </p>
         </div>
         <button
           onClick={() => setStreamActive(!streamActive)}
           type="button"
-          className="flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-800/60 px-4 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700/70 transition cursor-pointer"
+          className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+            isLight
+              ? "border-[#D1D9D0] bg-white text-[#141A15] hover:border-[#7FBF6A] shadow-xs active:scale-95"
+              : "border-[#243026] bg-[#0C100D] text-[#E8ECE4] hover:border-[#7FBF6A]/50 shadow-xs active:scale-95"
+          }`}
         >
-          <Radio className={`h-3.5 w-3.5 ${streamActive ? "text-emerald-400 animate-pulse" : "text-zinc-600"}`} />
+          <Radio
+            className={`h-3.5 w-3.5 ${
+              streamActive
+                ? "text-[#7FBF6A] animate-pulse"
+                : isLight
+                ? "text-[#8B968B]"
+                : "text-[#5E695E]"
+            }`}
+          />
           <span>{streamActive ? "Streaming Live" : "Stream Paused"}</span>
         </button>
       </div>
@@ -66,16 +101,53 @@ export function TelemetryView() {
       {/* Queue Depth Cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
-          { label: "Waiting Jobs",        value: "12", color: "text-zinc-100", bar: "bg-zinc-600 w-[25%]" },
-          { label: "Active Executing",    value: "4",  color: "text-emerald-400", bar: "bg-emerald-500 w-[40%]" },
-          { label: "Delayed Transitions", value: "2",  color: "text-amber-400", bar: "bg-amber-500 w-[15%]" },
-          { label: "Dead Letter Jobs",    value: "3",  color: "text-red-400",   bar: "bg-red-500 w-[10%]" },
+          {
+            label: "Waiting Jobs",
+            value: "12",
+            color: isLight ? "text-[#141A15]" : "text-[#E8ECE4]",
+            bar: "bg-[#8B968B] w-[25%]",
+          },
+          {
+            label: "Active Executing",
+            value: "4",
+            color: "text-[#7FBF6A]",
+            bar: "bg-[#7FBF6A] w-[40%] shadow-[0_0_8px_rgba(127,191,106,0.4)]",
+          },
+          {
+            label: "Delayed Transitions",
+            value: "2",
+            color: "text-[#E5B86A]",
+            bar: "bg-[#E5B86A] w-[15%]",
+          },
+          {
+            label: "Dead Letter Jobs",
+            value: "3",
+            color: "text-[#E5735C]",
+            bar: "bg-[#E5735C] w-[10%] shadow-[0_0_8px_rgba(229,115,92,0.4)]",
+          },
         ].map(({ label, value, color, bar }) => (
-          <div key={label} className="liquid-glass rounded-2xl p-4">
+          <div
+            key={label}
+            className={`liquid-glass rounded-2xl p-4 border transition-all ${
+              isLight
+                ? "border-[#D1D9D0] bg-[#FAFAF9]/90 shadow-sm"
+                : "border-[#243026] bg-[#141A15]/80 shadow-md"
+            }`}
+          >
             <div className="relative z-10">
-              <p className="text-xs font-semibold text-zinc-500">{label}</p>
+              <p
+                className={`text-xs font-medium ${
+                  isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                }`}
+              >
+                {label}
+              </p>
               <p className={`text-2xl font-black mt-1 ${color}`}>{value}</p>
-              <div className="w-full bg-zinc-800 h-1.5 rounded-full mt-3 overflow-hidden">
+              <div
+                className={`w-full h-1.5 rounded-full mt-3 overflow-hidden ${
+                  isLight ? "bg-[#E2E6E3]" : "bg-[#0C100D]"
+                }`}
+              >
                 <div className={`h-full rounded-full ${bar}`} />
               </div>
             </div>
@@ -84,44 +156,115 @@ export function TelemetryView() {
       </div>
 
       {/* BullMQ Repeatable Cron Schedulers Panel (Task T2.5) */}
-      <CronSchedulersPanel />
+      <CronSchedulersPanel theme={theme} />
 
       {/* Worker Pool Table */}
-      <div className="liquid-glass rounded-2xl overflow-hidden">
-        <div className="relative z-10 p-4 border-b border-zinc-800 flex items-center justify-between">
+      <div
+        className={`liquid-glass rounded-2xl overflow-hidden border ${
+          isLight
+            ? "border-[#D1D9D0] bg-[#FAFAF9]/90 shadow-sm"
+            : "border-[#243026] bg-[#141A15]/80 shadow-md"
+        }`}
+      >
+        <div
+          className={`relative z-10 p-4 border-b flex items-center justify-between ${
+            isLight ? "border-[#D1D9D0] bg-white/40" : "border-[#243026] bg-[#0C100D]/40"
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <Server className="h-4 w-4 text-indigo-400" />
-            <h3 className="text-sm font-bold text-zinc-100">Active Worker Pool (4 Nodes)</h3>
+            <Server className="h-4 w-4 text-[#7FBF6A]" />
+            <h3
+              className={`text-sm font-bold ${
+                isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+              }`}
+            >
+              Active Worker Pool (4 Nodes)
+            </h3>
           </div>
-          <span className="text-[11px] font-mono text-zinc-500 font-medium">Auto-balanced concurrency</span>
+          <span
+            className={`text-[11px] font-mono font-medium ${
+              isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+            }`}
+          >
+            Auto-balanced concurrency
+          </span>
         </div>
         <div className="relative z-10 overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-zinc-900/60 text-zinc-500 font-mono text-[11px] border-b border-zinc-800">
+            <thead
+              className={`font-mono text-[11px] border-b ${
+                isLight
+                  ? "bg-[#ECEFEA] text-[#5E695E] border-[#D1D9D0]"
+                  : "bg-[#0C100D]/70 text-[#8B968B] border-[#243026]"
+              }`}
+            >
               <tr>
                 {["Worker ID", "Status", "Concurrency", "CPU Usage", "Memory", "Heartbeat"].map((h) => (
-                  <th key={h} className="py-3 px-4">{h}</th>
+                  <th key={h} className="py-3 px-4 font-semibold">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800 text-zinc-300">
+            <tbody
+              className={`divide-y ${
+                isLight
+                  ? "divide-[#E2E6E3] text-[#141A15]"
+                  : "divide-[#243026] text-[#E8ECE4]"
+              }`}
+            >
               {workers.map((w) => (
-                <tr key={w.id} className="hover:bg-zinc-800/30">
-                  <td className="py-3 px-4 font-mono font-semibold text-zinc-200">{w.name}</td>
+                <tr
+                  key={w.id}
+                  className={`transition-colors ${
+                    isLight ? "hover:bg-[#F3F6F2]/80" : "hover:bg-[#1A221C]/60"
+                  }`}
+                >
+                  <td
+                    className={`py-3 px-4 font-mono font-semibold ${
+                      isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+                    }`}
+                  >
+                    {w.name}
+                  </td>
                   <td className="py-3 px-4">
-                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
-                      w.status === "busy"
-                        ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
-                        : "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
-                    }`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${w.status === "busy" ? "bg-amber-400" : "bg-emerald-400"}`} />
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${
+                        w.status === "busy"
+                          ? "bg-[#E5B86A]/15 text-[#E5B86A] border-[#E5B86A]/30"
+                          : "bg-[#7FBF6A]/15 text-[#7FBF6A] border-[#7FBF6A]/30"
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          w.status === "busy" ? "bg-[#E5B86A]" : "bg-[#7FBF6A] animate-pulse"
+                        }`}
+                      />
                       {w.status}
                     </span>
                   </td>
-                  <td className="py-3 px-4 font-mono text-zinc-400">{w.concurrency} / 10 jobs</td>
-                  <td className="py-3 px-4 font-mono text-zinc-400">{w.cpu}%</td>
-                  <td className="py-3 px-4 font-mono text-zinc-400">{w.memory}</td>
-                  <td className="py-3 px-4 text-emerald-400 text-[11px]">{w.lastHeartbeat}</td>
+                  <td
+                    className={`py-3 px-4 font-mono ${
+                      isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                    }`}
+                  >
+                    {w.concurrency} / 10 jobs
+                  </td>
+                  <td
+                    className={`py-3 px-4 font-mono ${
+                      isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                    }`}
+                  >
+                    {w.cpu}%
+                  </td>
+                  <td
+                    className={`py-3 px-4 font-mono ${
+                      isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                    }`}
+                  >
+                    {w.memory}
+                  </td>
+                  <td className="py-3 px-4 text-[#7FBF6A] font-mono text-[11px]">
+                    {w.lastHeartbeat}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -130,23 +273,72 @@ export function TelemetryView() {
       </div>
 
       {/* SSE Real-Time Stream */}
-      <div className="liquid-glass rounded-2xl p-5">
-        <div className="relative z-10 flex items-center justify-between pb-3 border-b border-zinc-800">
+      <div
+        className={`liquid-glass rounded-2xl p-5 border ${
+          isLight
+            ? "border-[#D1D9D0] bg-[#FAFAF9]/90 shadow-sm"
+            : "border-[#243026] bg-[#141A15]/80 shadow-md"
+        }`}
+      >
+        <div
+          className={`relative z-10 flex items-center justify-between pb-3 border-b ${
+            isLight ? "border-[#D1D9D0]" : "border-[#243026]"
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-indigo-400" />
-            <span className="text-sm font-bold text-zinc-200">Live Event Stream (`/api/v1/runs/stream`)</span>
+            <Activity className="h-4 w-4 text-[#7FBF6A]" />
+            <span
+              className={`text-sm font-bold ${
+                isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+              }`}
+            >
+              Live Event Stream (`/api/v1/runs/stream`)
+            </span>
           </div>
-          <span className="font-mono text-[11px] text-zinc-500 font-semibold">SSE Chunked</span>
+          <span
+            className={`font-mono text-[11px] font-semibold ${
+              isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+            }`}
+          >
+            SSE Chunked
+          </span>
         </div>
         <div className="relative z-10 mt-3 space-y-2">
           {events.map((evt) => (
-            <div key={evt.id} className="flex items-center justify-between font-mono text-xs p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800">
+            <div
+              key={evt.id}
+              className={`flex items-center justify-between font-mono text-xs p-2.5 rounded-xl border ${
+                isLight
+                  ? "bg-[#ECEFEA] border-[#D1D9D0]"
+                  : "bg-[#0C100D]/80 border-[#243026]"
+              }`}
+            >
               <div className="flex items-center gap-3">
-                <span className="text-zinc-600 text-[11px]">{evt.time}</span>
-                <span className="font-semibold text-zinc-200">{evt.event}</span>
-                <span className={`text-[10px] font-bold ${statusColor(evt.status)}`}>{evt.status}</span>
+                <span
+                  className={`text-[11px] ${
+                    isLight ? "text-[#8B968B]" : "text-[#5E695E]"
+                  }`}
+                >
+                  {evt.time}
+                </span>
+                <span
+                  className={`font-semibold ${
+                    isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+                  }`}
+                >
+                  {evt.event}
+                </span>
+                <span className={`text-[10px] font-bold ${statusColor(evt.status)}`}>
+                  {evt.status}
+                </span>
               </div>
-              <span className="text-zinc-500 font-bold text-[11px]">{evt.latency}ms</span>
+              <span
+                className={`font-bold text-[11px] ${
+                  isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                }`}
+              >
+                {evt.latency}ms
+              </span>
             </div>
           ))}
         </div>

@@ -8,7 +8,7 @@ import {
   seedRunIndegrees,
   checkRateLimit,
 } from "@/lib/redis/lua-scripts";
-import { RunStatus, TriggerSource, NodeExecStatus } from "@prisma/client";
+import { RunStatus, TriggerSource, NodeExecStatus, Prisma } from "@prisma/client";
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -174,7 +174,7 @@ export async function POST(
     }
 
     // 5. Parse JSON Payload
-    let parsedPayload: Record<string, unknown> = {};
+    let parsedPayload: Prisma.InputJsonObject = {};
     if (rawBody && rawBody.trim().length > 0) {
       try {
         parsedPayload = JSON.parse(rawBody);

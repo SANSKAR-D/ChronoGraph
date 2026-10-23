@@ -24,7 +24,8 @@ interface DLQJob {
   status: "pending" | "replaying" | "replayed";
 }
 
-export function DLQView() {
+export function DLQView({ theme = "dark" }: { theme?: "dark" | "light" }) {
+  const isLight = theme === "light";
   const [jobs, setJobs] = useState<DLQJob[]>([
     {
       id: "dlq_job_8911",
@@ -103,22 +104,38 @@ export function DLQView() {
     <div className="mx-auto w-full max-w-7xl px-4 pt-24 pb-12 sm:pt-28 sm:px-6 lg:px-8 space-y-6">
       {/* Toast Notification (Liquid Glass) */}
       {notification && (
-        <div className="liquid-glass flex items-center gap-2 rounded-xl border border-emerald-500/30 p-3 text-xs text-zinc-200 shadow-lg animate-in fade-in slide-in-from-top-2">
-          <CheckCircle className="h-4 w-4 text-zinc-400" />
-          <span className="font-semibold text-zinc-200">{notification}</span>
+        <div
+          className={`liquid-glass flex items-center gap-2.5 rounded-xl border p-3 text-xs shadow-lg animate-in fade-in slide-in-from-top-2 ${
+            isLight
+              ? "border-[#7FBF6A]/40 bg-[#FAFAF9]/95 text-[#141A15]"
+              : "border-[#7FBF6A]/40 bg-[#141A15]/95 text-[#E8ECE4]"
+          }`}
+        >
+          <CheckCircle className="h-4 w-4 text-[#7FBF6A] shrink-0" />
+          <span className="font-semibold">{notification}</span>
         </div>
       )}
 
       {/* DLQ Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-zinc-200 tracking-tight">Dead-Letter Queue (DLQ)</h2>
-            <span className="rounded-full bg-[#E5735C]/15 px-2.5 py-0.5 text-xs font-bold text-[#E5735C] border border-[#E5735C]/30">
+          <div className="flex items-center gap-2.5">
+            <h2
+              className={`text-xl font-bold tracking-tight ${
+                isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+              }`}
+            >
+              Dead-Letter Queue (DLQ)
+            </h2>
+            <span className="rounded-full bg-[#E5735C]/15 px-2.5 py-0.5 text-xs font-mono font-bold text-[#E5735C] border border-[#E5735C]/30 shadow-[0_0_12px_rgba(229,115,92,0.2)]">
               {jobs.filter((j) => j.status === "pending").length} Unresolved
             </span>
           </div>
-          <p className="text-xs text-zinc-400 font-medium mt-0.5">
+          <p
+            className={`text-xs font-medium mt-0.5 ${
+              isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+            }`}
+          >
             Jobs that exceeded retry limits under exponential backoff with full jitter.
           </p>
         </div>
@@ -126,7 +143,7 @@ export function DLQView() {
         <button
           onClick={replayAll}
           type="button"
-          className="flex items-center gap-1.5 rounded-full bg-[#E5735C] hover:bg-[#d6654e] px-4 py-2 text-xs font-semibold text-[#0C100D] transition cursor-pointer shadow-md shadow-[#E5735C]/20"
+          className="flex items-center gap-1.5 rounded-full bg-[#E5735C] hover:bg-[#d6654e] px-4 py-2 text-xs font-bold text-[#0C100D] transition-all cursor-pointer shadow-md shadow-[#E5735C]/25 active:scale-95"
         >
           <RotateCw className="h-3.5 w-3.5" />
           <span>Replay All Jobs</span>
@@ -140,32 +157,64 @@ export function DLQView() {
             key={job.id}
             className={`liquid-glass rounded-2xl p-5 border transition-all ${
               job.status === "replayed"
-                ? "border-emerald-500/35 bg-emerald-500/10 opacity-75"
-                : "border-zinc-800 hover:border-red-500/35"
+                ? "border-[#7FBF6A]/35 bg-[#7FBF6A]/10 opacity-75"
+                : isLight
+                ? "border-[#D1D9D0] bg-[#FAFAF9]/90 hover:border-[#E5735C]/50 shadow-sm"
+                : "border-[#243026] bg-[#141A15]/80 hover:border-[#E5735C]/50 shadow-md"
             }`}
           >
             <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-zinc-200">{job.id}</span>
-                  <span className="text-zinc-600">•</span>
-                  <span className="text-xs font-semibold text-zinc-400">{job.workflow}</span>
-                  <span className="text-zinc-600">•</span>
-                  <span className="font-mono text-[11px] text-zinc-500">{job.timestamp}</span>
+                  <span
+                    className={`font-mono text-xs font-bold ${
+                      isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+                    }`}
+                  >
+                    {job.id}
+                  </span>
+                  <span className={isLight ? "text-[#D1D9D0]" : "text-[#243026]"}>•</span>
+                  <span
+                    className={`text-xs font-medium ${
+                      isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                    }`}
+                  >
+                    {job.workflow}
+                  </span>
+                  <span className={isLight ? "text-[#D1D9D0]" : "text-[#243026]"}>•</span>
+                  <span
+                    className={`font-mono text-[11px] ${
+                      isLight ? "text-[#8B968B]" : "text-[#5E695E]"
+                    }`}
+                  >
+                    {job.timestamp}
+                  </span>
                 </div>
-                <p className="text-xs font-mono text-red-400 font-bold">{job.failedNode}</p>
-                <div className="rounded-xl bg-zinc-900/70 p-3 font-mono text-xs text-zinc-200 border border-zinc-800 mt-2 shadow-xs">
+                <p className="text-xs font-mono text-[#E5735C] font-bold">{job.failedNode}</p>
+                <div
+                  className={`rounded-xl p-3 font-mono text-xs mt-2 border ${
+                    isLight
+                      ? "bg-[#ECEFEA] border-[#D1D9D0] text-[#C8533D]"
+                      : "bg-[#0C100D]/90 border-[#243026] text-[#E5735C]"
+                  }`}
+                >
                   {job.lastError}
                 </div>
               </div>
 
-              <div className="flex flex-col items-end gap-2">
-                <span className="rounded-md bg-zinc-800/60 px-2 py-0.5 font-mono text-[11px] text-zinc-200 font-medium">
+              <div className="flex flex-col items-end gap-2.5">
+                <span
+                  className={`rounded-md px-2 py-0.5 font-mono text-[11px] font-medium border ${
+                    isLight
+                      ? "bg-[#E2E6E3] border-[#D1D9D0] text-[#141A15]"
+                      : "bg-[#0C100D]/80 border-[#243026] text-[#E8ECE4]"
+                  }`}
+                >
                   Attempts: {job.attempts}/{job.maxAttempts}
                 </span>
 
                 {job.status === "replayed" ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-zinc-400 font-semibold">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-[#7FBF6A] font-semibold">
                     <CheckCircle className="h-3.5 w-3.5" />
                     Re-injected
                   </span>
@@ -174,10 +223,16 @@ export function DLQView() {
                     onClick={() => replayJob(job.id)}
                     disabled={job.status === "replaying"}
                     type="button"
-                    className="flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-900/80 px-3.5 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-900 transition cursor-pointer disabled:opacity-50 shadow-xs"
+                    className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 ${
+                      isLight
+                        ? "border-[#D1D9D0] bg-white text-[#141A15] hover:border-[#7FBF6A] hover:text-[#548A44] shadow-xs active:scale-95"
+                        : "border-[#243026] bg-[#0C100D] text-[#E8ECE4] hover:border-[#7FBF6A]/60 hover:text-[#7FBF6A] shadow-xs active:scale-95"
+                    }`}
                   >
                     <RotateCw
-                      className={`h-3 w-3 text-zinc-400 ${job.status === "replaying" ? "animate-spin" : ""}`}
+                      className={`h-3 w-3 ${
+                        isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                      } ${job.status === "replaying" ? "animate-spin text-[#7FBF6A]" : ""}`}
                     />
                     <span>{job.status === "replaying" ? "Replaying..." : "Replay Job"}</span>
                   </button>

@@ -78,13 +78,13 @@ export default function ChronoGraphApp() {
               <StudioView theme={isLightMode ? "light" : "dark"} />
             </TabPanel>
             <TabPanel id="telemetry" shouldForceMount className="h-full overflow-y-auto">
-              <TelemetryView />
+              <TelemetryView theme={isLightMode ? "light" : "dark"} />
             </TabPanel>
             <TabPanel id="dlq" shouldForceMount className="h-full overflow-y-auto">
-              <DLQView />
+              <DLQView theme={isLightMode ? "light" : "dark"} />
             </TabPanel>
             <TabPanel id="architecture" shouldForceMount className="h-full overflow-y-auto">
-              <ArchitectureView />
+              <ArchitectureView theme={isLightMode ? "light" : "dark"} />
             </TabPanel>
           </TabPanelCarousel>
         </main>
