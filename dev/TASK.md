@@ -36,7 +36,7 @@
 ## Phase 4: Real-Time SSE Telemetry & API Endpoints (Hours 18–22)
 - [x] **T4.1 (Redis Pub/Sub Publisher):** Emit structured JSON events from workers on every state change (`RUNNING`, `RETRYING`, `SUCCESS`, `DLQ`) to `channel:run:{runId}`[cite: 8, 18].
 - [x] **T4.2 (SSE Streaming Route):** Build `GET /api/v1/runs/[runId]/stream/route.ts` using `ReadableStream` and `text/event-stream` headers to pipe Redis Pub/Sub events to the browser[cite: 8, 18].
-- [ ] **T4.3 (Cluster Telemetry Endpoint):** Build `GET /api/v1/cluster/health` returning active worker count, heartbeat timestamps, and queue metrics (Waiting, Active, Delayed, DLQ)[cite: 8, 18].
+- [x] **T4.3 (Cluster Telemetry Endpoint):** Build `GET /api/v1/cluster/health` returning active worker count, heartbeat timestamps, and queue metrics (Waiting, Active, Delayed, DLQ)[cite: 8, 18].
 
 ---
 

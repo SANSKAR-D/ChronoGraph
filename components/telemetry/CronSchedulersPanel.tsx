@@ -489,7 +489,6 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
           <Sparkles className="h-3 w-3 text-[#7FBF6A]" />
           <span>BullMQ v6 Repeatable Job Engine • Atomic Redis In-Degree Seeding</span>
         </div>
-        <span>REST Endpoint: <code className={isLight ? "text-[#141A15]" : "text-[#E8ECE4]"}>/api/v1/cron/schedulers</code></span>
       </div>
     </div>
   );

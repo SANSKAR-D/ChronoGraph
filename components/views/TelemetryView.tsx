@@ -292,7 +292,7 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
                 isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
               }`}
             >
-              Live Event Stream (`/api/v1/runs/stream`)
+              Live Event Stream
             </span>
           </div>
           <span
