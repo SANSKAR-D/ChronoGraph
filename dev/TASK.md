@@ -22,11 +22,11 @@
 ---
 
 ## Phase 3: Distributed Worker Pool & Fault Resilience (Hours 10–18)
-- [ ] **T3.1 (Worker Process Entrypoint):** Build standalone worker runner (`src/workers/dag-worker.ts`) with configurable concurrency and Redis heartbeat emission (`worker:heartbeat:{workerId}`)[cite: 8, 18].
-- [ ] **T3.2 (Node Executors):**
-  - [ ] `executeHttpNode`: Outbound `fetch` with timeout, custom headers, `X-Idempotency-Key` injection, and template variable replacement (`{{node_1.data.userId}}`)[cite: 8, 18].
-  - [ ] `executeTransformNode`: Safe JSON path mapping / filtering[cite: 8, 18].
-  - [ ] `executeDelayNode`: Non-blocking BullMQ delayed transition[cite: 8, 18].
+- [x] **T3.1 (Worker Process Entrypoint):** Build standalone worker runner (`src/workers/dag-worker.ts`) with configurable concurrency and Redis heartbeat emission (`worker:heartbeat:{workerId}`)[cite: 8, 18].
+- [x] **T3.2 (Node Executors):**
+  - [x] `executeHttpNode`: Outbound `fetch` with timeout, custom headers, `X-Idempotency-Key` injection, and template variable replacement (`{{node_1.data.userId}}`)[cite: 8, 18].
+  - [x] `executeTransformNode`: Safe JSON path mapping / filtering[cite: 8, 18].
+  - [x] `executeDelayNode`: Non-blocking BullMQ delayed transition[cite: 8, 18].
 - [x] **T3.3 (Exponential Backoff + Full Jitter):** Configure BullMQ custom backoff strategy: `Math.floor(Math.random() * Math.min(maxCap, base * Math.pow(2, attempt)))`[cite: 8, 18].
 - [x] **T3.4 (Dead-Letter Queue Routing):** Hook into BullMQ `failed` event; when `job.attemptsMade >= job.opts.attempts`, persist failure context to `dead_letter_jobs`, mark downstream dependent nodes as `SKIPPED/HALTED`, and publish `DLQ_ROUTED` event[cite: 8, 18].
 - [x] **T3.5 (DLQ Replay Endpoint):** Create `POST /api/v1/dlq/[jobId]/replay` to re-inject a fixed job back into the topological execution flow[cite: 8, 18].
@@ -34,8 +34,8 @@
 ---
 
 ## Phase 4: Real-Time SSE Telemetry & API Endpoints (Hours 18–22)
-- [ ] **T4.1 (Redis Pub/Sub Publisher):** Emit structured JSON events from workers on every state change (`RUNNING`, `RETRYING`, `SUCCESS`, `DLQ`) to `channel:run:{runId}`[cite: 8, 18].
-- [ ] **T4.2 (SSE Streaming Route):** Build `GET /api/v1/runs/[runId]/stream/route.ts` using `ReadableStream` and `text/event-stream` headers to pipe Redis Pub/Sub events to the browser[cite: 8, 18].
+- [x] **T4.1 (Redis Pub/Sub Publisher):** Emit structured JSON events from workers on every state change (`RUNNING`, `RETRYING`, `SUCCESS`, `DLQ`) to `channel:run:{runId}`[cite: 8, 18].
+- [x] **T4.2 (SSE Streaming Route):** Build `GET /api/v1/runs/[runId]/stream/route.ts` using `ReadableStream` and `text/event-stream` headers to pipe Redis Pub/Sub events to the browser[cite: 8, 18].
 - [ ] **T4.3 (Cluster Telemetry Endpoint):** Build `GET /api/v1/cluster/health` returning active worker count, heartbeat timestamps, and queue metrics (Waiting, Active, Delayed, DLQ)[cite: 8, 18].
 
 ---
