@@ -97,13 +97,18 @@ describe("T3.2: executeDelayNode Executor (Non-Blocking BullMQ Transition)", () 
       },
     };
 
+    const mockQueue: any = {
+      add: vi.fn().mockResolvedValue({ id: "delayed_job_test" }),
+    };
+
     const result = await executeDelayNode({
       job: mockJob,
-      queue: null as any,
+      queue: mockQueue,
     });
 
     expect(result.delayMs).toBe(2500);
     expect(result.delayed).toBe(true);
+    expect(mockQueue.add).toHaveBeenCalled();
   });
 });
 

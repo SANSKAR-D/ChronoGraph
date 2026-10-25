@@ -516,7 +516,7 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
           </div>
 
           {/* ── Milestone cards ── z-30 (Above particles and 3D canvas) ── */}
-          <div className="absolute inset-0 flex items-center justify-between px-6 sm:px-10 md:px-14 lg:px-20 pointer-events-none z-30 overflow-hidden">
+          <div className="absolute inset-0 flex items-center justify-center md:justify-between px-4 sm:px-8 md:px-14 lg:px-20 pointer-events-none z-30 overflow-hidden">
             {/* Left: The Dormammu Loop? */}
             <div
               ref={leftCardRef}
@@ -525,7 +525,7 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
             >
               {/* Technical Glass Card — 1px border, high contrast */}
               <div
-                className="relative overflow-hidden w-64 sm:w-72 lg:w-80 min-h-[460px] sm:min-h-[500px] rounded-2xl p-6 sm:p-7 flex flex-col justify-between"
+                className="relative overflow-hidden w-[calc(100vw-2.5rem)] max-w-[340px] md:w-72 lg:w-80 min-h-[380px] sm:min-h-[460px] lg:min-h-[500px] rounded-2xl p-5 sm:p-7 flex flex-col justify-between"
                 style={{
                   background: "rgba(20, 26, 21, 0.65)",
                   backdropFilter: "blur(20px) saturate(140%)",
@@ -603,15 +603,15 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
               </div>
             </div>
 
-            {/* Right: The Time Stone? */}
+            {/* Right: The Time Stone? (Desktop / Tablet only to prevent mobile card collision) */}
             <div
               ref={rightCardRef}
-              className="pointer-events-none will-change-transform flex flex-col items-center"
+              className="hidden md:flex pointer-events-none will-change-transform flex-col items-center"
               style={{ opacity: 0, transform: "translate3d(110px, 18px, 0)", visibility: "hidden" }}
             >
               {/* Technical Glass Card — 1px border, high contrast */}
               <div
-                className="relative overflow-hidden w-64 sm:w-72 lg:w-80 min-h-[460px] sm:min-h-[500px] rounded-2xl p-6 sm:p-7 flex flex-col justify-between"
+                className="relative overflow-hidden w-64 sm:w-72 lg:w-80 min-h-[380px] sm:min-h-[460px] lg:min-h-[500px] rounded-2xl p-5 sm:p-7 flex flex-col justify-between"
                 style={{
                   background: "rgba(20, 26, 21, 0.65)",
                   backdropFilter: "blur(20px) saturate(140%)",
@@ -697,9 +697,9 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
             style={{ opacity: 0, visibility: "hidden" }}
           >
             <div
-              className="flex flex-wrap items-center gap-4 rounded-xl px-5 py-3 max-w-xl w-full justify-between transition-all duration-300"
+              className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 rounded-2xl px-5 py-3 max-w-xl w-full transition-all duration-300 text-center sm:text-left"
               style={{
-                background: "rgba(20, 26, 21, 0.55)",
+                background: "rgba(20, 26, 21, 0.75)",
                 backdropFilter: "blur(20px) saturate(140%)",
                 WebkitBackdropFilter: "blur(20px) saturate(140%)",
                 border: "1.5px solid #243026",

@@ -57,7 +57,7 @@ export function Tab(props: TabProps) {
       {...props}
       style={{ anchorName: `--tab-${props.id}`, ...(props.style as object) } as CSSProperties}
       className={composeRenderProps(props.className, (className, renderProps) =>
-        `relative flex items-center gap-1.5 cursor-pointer select-none rounded-full px-4 py-1.5 text-xs font-medium transition-all outline-none focus-visible:ring-2 focus-visible:ring-[#7FBF6A] tab ${
+        `relative flex items-center gap-1 sm:gap-1.5 cursor-pointer select-none rounded-full px-2 sm:px-4 py-1 sm:py-1.5 text-[11px] sm:text-xs font-medium transition-all outline-none focus-visible:ring-2 focus-visible:ring-[#7FBF6A] tab ${
           renderProps.isSelected
             ? "text-[#0C100D] font-semibold"
             : "text-[#8B968B] hover:text-[#E8ECE4]"

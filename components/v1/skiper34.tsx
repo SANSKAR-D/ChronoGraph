@@ -129,7 +129,7 @@ const StickyCard_003 = ({
           {children}
         </div>
       ) : (
-        <div className="h-full w-full flex flex-col justify-between p-6 sm:p-8 md:p-10 relative overflow-hidden">
+        <div className="h-full w-full flex flex-col justify-between p-4 sm:p-7 md:p-10 relative overflow-y-auto no-scrollbar">
           {/* Subtle background ambient overlay */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute -top-24 -right-24 w-96 h-96 bg-[#7FBF6A]/10 rounded-full blur-[100px]" />
@@ -137,26 +137,26 @@ const StickyCard_003 = ({
           </div>
 
           {/* Top Bar: Badge & Tags */}
-          <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-[#243026] pb-4">
-            <div className="flex items-center gap-2.5">
+          <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 sm:gap-3 border-b border-[#243026] pb-3 sm:pb-4">
+            <div className="flex items-center gap-2 sm:gap-2.5">
               {icon && (
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#243026] bg-[#0C100D] text-[#7FBF6A]">
+                <div className="flex h-7 w-7 sm:h-9 sm:w-9 items-center justify-center rounded-xl border border-[#243026] bg-[#0C100D] text-[#7FBF6A]">
                   {icon}
                 </div>
               )}
               {badge && (
-                <span className="font-mono text-xs font-semibold tracking-wider uppercase text-[#7FBF6A]">
+                <span className="font-mono text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-[#7FBF6A]">
                   {badge}
                 </span>
               )}
             </div>
 
             {tags && tags.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
                 {tags.map((tag, tIdx) => (
                   <span
                     key={tIdx}
-                    className="rounded-full border border-[#243026] bg-[#0C100D]/80 px-3 py-1 text-[11px] font-mono text-[#8B968B]"
+                    className="rounded-full border border-[#243026] bg-[#0C100D]/80 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-mono text-[#8B968B]"
                   >
                     {tag}
                   </span>
@@ -166,12 +166,12 @@ const StickyCard_003 = ({
           </div>
 
           {/* Middle Content: Title, Description & Technical Illustration */}
-          <div className="relative z-10 grid grid-cols-1 md:grid-cols-12 gap-8 items-center my-auto">
-            <div className="md:col-span-7 space-y-4">
-              <h3 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#E8ECE4] leading-tight">
+          <div className="relative z-10 grid grid-cols-1 md:grid-cols-12 gap-5 md:gap-8 items-center my-auto py-2">
+            <div className="md:col-span-7 space-y-2 sm:space-y-4">
+              <h3 className="text-xl sm:text-3xl md:text-4xl font-bold tracking-tight text-[#E8ECE4] leading-tight">
                 {title}
               </h3>
-              <p className="text-sm sm:text-base text-[#8B968B] leading-relaxed">
+              <p className="text-xs sm:text-sm md:text-base text-[#8B968B] leading-relaxed">
                 {description}
               </p>
             </div>

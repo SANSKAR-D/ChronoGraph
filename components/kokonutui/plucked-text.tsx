@@ -433,7 +433,7 @@ export function PluckedTextBase({
   return (
     <div className={cn("@container flex w-full justify-center pointer-events-auto", className)}>
       <div
-        className="group/pluck relative cursor-grab touch-none select-none px-[0.3em] py-[0.5em] font-black text-[clamp(2.5rem,8vw,5.5rem)] leading-none tracking-tight data-[grabbing]:cursor-grabbing font-[family-name:var(--font-brand)]"
+        className="group/pluck relative cursor-grab touch-none select-none px-[0.3em] py-[0.5em] font-black text-[clamp(1.75rem,7.5vw,5.5rem)] leading-none tracking-tight data-[grabbing]:cursor-grabbing font-[family-name:var(--font-brand)]"
         ref={stageRef}
       >
         <span className="sr-only">{text}</span>

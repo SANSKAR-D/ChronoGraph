@@ -15,6 +15,7 @@ import { DLQView } from "@/components/views/DLQView";
 import { ArchitectureView } from "@/components/views/ArchitectureView";
 import { FluidCursorTrail } from "@/components/ui/fluid-cursor-trail";
 import { PullCord } from "@/components/kokonutui/pull-cord";
+import { LampCutoutSeparator } from "@/components/ui/lamp-cutout-separator";
 
 export default function ChronoGraphApp() {
   const [selectedTab, setSelectedTab] = useState<string>("home");
@@ -38,7 +39,7 @@ export default function ChronoGraphApp() {
       {/* Luminous fluid cursor trail on mouse movement */}
       <FluidCursorTrail />
 
-      {/* ── Kokonut UI Pull-Cord Component: Slide from right below navbar (Hidden on Home tab) ── */}
+      {/* ── Kokonut UI Pull-Cord Component: Slide from right below navbar (Hidden on Home tab & mobile/tablet) ── */}
       <AnimatePresence>
         {selectedTab !== "home" && (
           <motion.div
@@ -47,7 +48,7 @@ export default function ChronoGraphApp() {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 120, opacity: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 25 }}
-            className="fixed top-20 right-4 z-30 pointer-events-auto scale-75 origin-top-right md:scale-80"
+            className="hidden lg:block fixed top-26 right-6 z-30 pointer-events-auto scale-100 origin-top-right"
           >
             <PullCord
               checked={theme === "light"}
@@ -58,13 +59,33 @@ export default function ChronoGraphApp() {
         )}
       </AnimatePresence>
 
+      {/* ── Balanced Curved Cutout Notch (ONLY on Telemetry, DLQ, Architecture — NOT on Home or Studio) ── */}
+      <AnimatePresence>
+        {selectedTab !== "home" && selectedTab !== "studio" && (
+          <motion.div
+            key="lamp-cutout-separator"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <LampCutoutSeparator theme={isLightMode ? "light" : "dark"} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <Tabs
         selectedKey={selectedTab}
         onSelectionChange={(key) => setSelectedTab(key as string)}
         className="flex flex-col flex-1 h-full overflow-hidden relative"
       >
         {/* Floating Glassmorphism Navbar with Swipeable Tabs */}
-        <Navbar onLogin={handleLogin} onQuickRun={() => setSelectedTab("studio")} />
+        <Navbar
+          onLogin={handleLogin}
+          onQuickRun={() => setSelectedTab("studio")}
+          theme={theme}
+          onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+        />
 
         <main className="flex flex-1 overflow-hidden relative w-full h-full">
           <TabPanelCarousel className="h-full w-full">
@@ -77,13 +98,13 @@ export default function ChronoGraphApp() {
             <TabPanel id="studio" shouldForceMount className="h-full overflow-hidden relative">
               <StudioView theme={isLightMode ? "light" : "dark"} />
             </TabPanel>
-            <TabPanel id="telemetry" shouldForceMount className="h-full overflow-y-auto">
+            <TabPanel id="telemetry" shouldForceMount className="h-full overflow-y-auto no-scrollbar">
               <TelemetryView theme={isLightMode ? "light" : "dark"} />
             </TabPanel>
-            <TabPanel id="dlq" shouldForceMount className="h-full overflow-y-auto">
+            <TabPanel id="dlq" shouldForceMount className="h-full overflow-y-auto no-scrollbar">
               <DLQView theme={isLightMode ? "light" : "dark"} />
             </TabPanel>
-            <TabPanel id="architecture" shouldForceMount className="h-full overflow-y-auto">
+            <TabPanel id="architecture" shouldForceMount className="h-full overflow-y-auto no-scrollbar">
               <ArchitectureView theme={isLightMode ? "light" : "dark"} />
             </TabPanel>
           </TabPanelCarousel>

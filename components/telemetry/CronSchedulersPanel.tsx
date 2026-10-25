@@ -46,15 +46,16 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
     try {
       setIsRefreshing(true);
       const res = await fetch("/api/v1/cron/schedulers");
+      if (!res.ok) return;
       const json = await res.json();
-      if (json.success && Array.isArray(json.schedulers)) {
+      if (json?.success && Array.isArray(json.schedulers)) {
         setSchedulers(json.schedulers);
         if (json.schedulers.length > 0 && !selectedWorkflowId) {
           setSelectedWorkflowId(json.schedulers[0].workflowId);
         }
       }
-    } catch (err) {
-      console.error("Failed to load BullMQ cron schedulers:", err);
+    } catch {
+      // Ignore transient network aborts during Next.js reload/restart
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -161,16 +162,16 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
 
   return (
     <div
-      className={`liquid-glass rounded-2xl overflow-hidden border ${
+      className={`rounded-2xl overflow-hidden border ${
         isLight
-          ? "border-[#D1D9D0] bg-[#FAFAF9]/90 shadow-sm"
-          : "border-[#243026] bg-[#141A15]/90 shadow-md"
+          ? "border-[#E2E6E3] bg-white shadow-xs"
+          : "border-[#243026] bg-[#141A15] shadow-xs"
       }`}
     >
       {/* Panel Header */}
       <div
-        className={`relative z-10 p-5 border-b flex flex-wrap items-center justify-between gap-4 ${
-          isLight ? "border-[#D1D9D0] bg-white/40" : "border-[#243026]"
+        className={`p-5 border-b flex flex-wrap items-center justify-between gap-4 ${
+          isLight ? "border-[#E2E6E3] bg-[#F7F9F6]" : "border-[#243026] bg-[#0C100D]/60"
         }`}
       >
         <div className="flex items-center gap-3">
@@ -481,8 +482,8 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
       <div
         className={`px-5 py-3 border-t flex items-center justify-between text-[10px] font-mono ${
           isLight
-            ? "border-[#D1D9D0] bg-white/50 text-[#5E695E]"
-            : "border-[#243026] bg-[#0C100D]/50 text-[#8B968B]"
+            ? "border-[#E2E6E3] bg-[#F7F9F6] text-[#5E695E]"
+            : "border-[#243026] bg-[#0C100D]/60 text-[#8B968B]"
         }`}
       >
         <div className="flex items-center gap-1.5">

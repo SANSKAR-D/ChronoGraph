@@ -9,44 +9,52 @@ import { ChronoGraphIcon } from "@/components/ui/logo";
 interface NavbarProps {
   onQuickRun?: () => void;
   onLogin?: () => void;
+  theme?: "dark" | "light";
+  onToggleTheme?: () => void;
 }
 
-export function Navbar({ onQuickRun, onLogin }: NavbarProps) {
+export function Navbar({ onQuickRun, onLogin, theme = "dark", onToggleTheme }: NavbarProps) {
+  const isLight = theme === "light";
+
   return (
     <motion.header
       initial={{ y: -30, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-      className="fixed top-4 inset-x-0 z-50 flex justify-center px-4 sm:px-6 pointer-events-none"
+      className="fixed top-2 sm:top-4 inset-x-0 z-50 flex justify-center px-2 sm:px-6 pointer-events-none"
     >
       {/* Floating liquid-glass capsule */}
       <div
-        className="pointer-events-auto flex items-center justify-between w-full max-w-[1600px] rounded-full px-5 py-2.5 transition-all duration-300"
+        className="pointer-events-auto flex items-center justify-between w-full max-w-[1600px] rounded-full px-3 sm:px-5 py-2 sm:py-2.5 transition-all duration-300 gap-1 sm:gap-3"
         style={{
-          background: "rgba(20, 26, 21, 0.65)",
-          backdropFilter: "blur(5px) saturate(140%)",
-          WebkitBackdropFilter: "blur(15px) saturate(140%)",
-          border: "1px solid #243026",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)",
+          background: isLight ? "rgba(255, 255, 255, 0.85)" : "rgba(20, 26, 21, 0.65)",
+          backdropFilter: "blur(20px) saturate(140%)",
+          WebkitBackdropFilter: "blur(20px) saturate(140%)",
+          border: isLight ? "1px solid #D1D9D0" : "1px solid #243026",
+          boxShadow: isLight
+            ? "0 8px 32px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)"
+            : "0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)",
         }}
       >
         {/* ── Left: brand logo & name ── */}
-        <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+        <div className="flex items-center gap-2 min-w-0 shrink-0">
           <ChronoGraphIcon className="h-4.5 w-4.5 text-[#75d555ff] shrink-0" />
           <span
-            className="text-sm font-semibold tracking-tight text-[#E8ECE4] select-none font-[family-name:var(--font-brand)]"
+            className={`text-sm font-semibold tracking-tight select-none font-[family-name:var(--font-brand)] hidden md:inline ${
+              isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+            }`}
           >
             Chrono<span className="text-[#75d555ff]">Graph</span>
           </span>
         </div>
 
         {/* ── Center: tab strip with neutral indicator ── */}
-        <nav className="flex items-center">
+        <nav className="flex items-center min-w-0">
           <div
-            className="relative rounded-full p-1"
+            className="relative rounded-full p-0.5 sm:p-1"
             style={{
-              background: "rgba(20, 26, 21, 0.6)",
-              border: "1px solid #243026",
+              background: isLight ? "rgba(240, 243, 239, 0.8)" : "rgba(20, 26, 21, 0.6)",
+              border: isLight ? "1px solid #D1D9D0" : "1px solid #243026",
             }}
           >
             <TabList aria-label="Main Navigation">
@@ -57,7 +65,8 @@ export function Navbar({ onQuickRun, onLogin }: NavbarProps) {
                 <span>Studio</span>
               </Tab>
               <Tab id="telemetry">
-                <span>Telemetry</span>
+                <span className="hidden sm:inline">Telemetry</span>
+                <span className="sm:hidden">Telem</span>
               </Tab>
               <Tab id="dlq">
                 <span>DLQ</span>
@@ -73,15 +82,30 @@ export function Navbar({ onQuickRun, onLogin }: NavbarProps) {
           </div>
         </nav>
 
-        {/* ── Right: Login button ── */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* ── Right: Theme toggle (mobile/tablet) + Login button ── */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {onToggleTheme && (
+            <button
+              onClick={onToggleTheme}
+              type="button"
+              className={`lg:hidden flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full border transition-colors cursor-pointer ${
+                isLight
+                  ? "border-[#D1D9D0] bg-white text-[#5E695E] hover:text-[#141A15]"
+                  : "border-[#243026] bg-[#141A15] text-[#8B968B] hover:text-[#E8ECE4]"
+              }`}
+              title="Toggle theme"
+            >
+              <span className="text-xs">{isLight ? "🌙" : "☀️"}</span>
+            </button>
+          )}
+
           <button
             onClick={onLogin}
             type="button"
-            className="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-[#0C100D] bg-[#7FBF6A] hover:bg-[#92CF7D] active:scale-[0.98] transition-all cursor-pointer border border-[#7FBF6A]"
+            className="flex items-center gap-1.5 rounded-full px-2.5 sm:px-4 py-1 sm:py-1.5 text-xs font-semibold text-[#0C100D] bg-[#7FBF6A] hover:bg-[#92CF7D] active:scale-[0.98] transition-all cursor-pointer border border-[#7FBF6A]"
           >
             <LogIn className="h-3.5 w-3.5" />
-            <span>Login</span>
+            <span className="hidden sm:inline">Login</span>
           </button>
         </div>
       </div>

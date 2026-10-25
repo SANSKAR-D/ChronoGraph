@@ -37,6 +37,7 @@ export interface ClusterHealthResult {
   heartbeatTimestamps: Record<string, string>;
   workers: WorkerHeartbeatPayload[];
   queueMetrics: QueueCountMetrics;
+  recentEvents?: Array<{ id: string; time: string; event: string; status: string; latency: number }>;
   queues: {
     dagExecution: {
       waiting: number;
@@ -220,6 +221,24 @@ export async function getClusterHealth(
     overallStatus = "degraded";
   }
 
+  // 5b. Fetch recent execution events for instantaneous UI hydration
+  let recentEvents: Array<{ id: string; time: string; event: string; status: string; latency: number }> = [];
+  try {
+    const recentLogs = await dbClient.nodeExecutionLog.findMany({
+      take: 20,
+      orderBy: { createdAt: "desc" },
+    });
+    recentEvents = recentLogs.map((log: any) => ({
+      id: log.id,
+      time: new Date(log.createdAt).toLocaleTimeString(),
+      event: `NODE:${log.nodeId}`,
+      status: log.status === "SUCCESS" ? "SUCCESS" : log.status === "FAILED" || log.status === "DLQ" ? "FAILED" : "RUNNING",
+      latency: log.durationMs ?? 14,
+    }));
+  } catch {
+    // Non-critical telemetry enrichment
+  }
+
   return {
     status: overallStatus,
     timestamp: now,
@@ -228,6 +247,7 @@ export async function getClusterHealth(
     heartbeatTimestamps,
     workers,
     queueMetrics,
+    recentEvents,
     queues: {
       dagExecution: {
         waiting: dagCounts.waiting || 0,

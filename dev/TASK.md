@@ -41,11 +41,11 @@
 ---
 
 ## Phase 5: Frontend Studio, 3D Hero & Live Canvas Integration (Hours 22–30)
-- [ ] **T5.1 (3D Spatial Landing Page):** Integrate the `ChronoGraph3DHero` component with cursor-reactive 3D tilt, Isometric Lock toggle, and instant **"Launch Studio"** transition[cite: 18].
-- [ ] **T5.2 (React Flow Studio Canvas):** Build custom node components (`TriggerNode`, `HttpNode`, `TransformNode`, `DelayNode`) with live status rings (`Idle`, `Running`, `Retrying`, `Success`, `DLQ`)[cite: 8, 18].
-- [ ] **T5.3 (Interactive Cycle Guard on Canvas):** Hook `onConnect` in React Flow to run client-side DFS; if a cycle is created, animate a red dashed edge and fire a toast error[cite: 8, 18].
-- [ ] **T5.4 (Accessible Node Inspector Drawer):** Build slide-over configuration forms using `react-aria-components` for editing node parameters, retry caps, and cron schedules[cite: 8, 18].
-- [ ] **T5.5 (Live SSE Log Drawer & Replay Tab):** Connect `EventSource` to `/api/v1/runs/[runId]/stream` so nodes light up in real time as workers execute them, with a bottom terminal showing live step logs and a DLQ Replay tab[cite: 8, 18].
+- [x] **T5.1 (3D Spatial Landing Page):** Integrate the `ChronoGraph3DHero` component with cursor-reactive 3D tilt, Isometric Lock toggle, and instant **"Launch Studio"** transition[cite: 18].
+- [x] **T5.2 (React Flow Studio Canvas):** Build custom node components (`TriggerNode`, `HttpNode`, `TransformNode`, `DelayNode`) with live status rings (`Idle`, `Running`, `Retrying`, `Success`, `DLQ`)[cite: 8, 18].
+- [x] **T5.3 (Interactive Cycle Guard on Canvas):** Hook `onConnect` in React Flow to run client-side DFS; if a cycle is created, animate a red dashed edge and fire a toast error[cite: 8, 18].
+- [x] **T5.4 (Accessible Node Inspector Drawer):** Build slide-over configuration forms using `react-aria-components` for editing node parameters, retry caps, and cron schedules[cite: 8, 18].
+- [x] **T5.5 (Live SSE Log Drawer & Replay Tab):** Connect `EventSource` to `/api/v1/runs/[runId]/stream` so nodes light up in real time as workers execute them, with a bottom terminal showing live step logs and a DLQ Replay tab[cite: 8, 18].
 
 ---
 

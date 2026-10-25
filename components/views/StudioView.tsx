@@ -23,9 +23,6 @@ import {
   AlertTriangle,
   Link2,
   Settings2,
-  Sliders,
-  ShieldCheck,
-  Zap,
 } from "lucide-react";
 import { validateDAG } from "@/lib/dag/cycle-detector";
 
@@ -218,7 +215,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const [activeEdgeIndex, setActiveEdgeIndex] = useState<number>(-1);
 
   // Selected Node for Node Inspector Drawer (Target URL, Retries, Jitter Backoff)
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>("http_1");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
   // Bottom Drop-Up Sliding Drawer / Desk state
@@ -489,11 +486,68 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     }
   };
 
-  const runWorkflow = () => {
+  const runWorkflow = async () => {
     if (isRunning) return;
     setIsRunning(true);
     setNodes((prev) => prev.map((n) => ({ ...n, status: "idle" })));
 
+    // 1. Try real backend webhook ingestion endpoint
+    let runId: string | null = null;
+    try {
+      const webhookNode = nodes.find((n) => n.type === "webhook_trigger");
+      const endpoint = webhookNode?.config?.url || "/api/v1/hooks/orders_settle";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-webhook-secret": "chronograph_webhook_secret_2026",
+        },
+        body: JSON.stringify({
+          source: "chronograph_studio",
+          timestamp: new Date().toISOString(),
+          nodesCount: nodes.length,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.runId) {
+          runId = String(data.runId);
+          showToast(`Run dispatched (${String(data.runId).slice(0, 8)}...) • SSE Connected`);
+        }
+      }
+    } catch {
+      // Offline fallback mode
+    }
+
+    // 2. If real SSE runId is available, connect EventSource to /api/v1/runs/[runId]/stream
+    let eventSource: EventSource | null = null;
+    if (runId) {
+      try {
+        eventSource = new EventSource(`/api/v1/runs/${runId}/stream`);
+        const handleRunMessage = (e: MessageEvent) => {
+          try {
+            const parsed = JSON.parse(e.data);
+            if (parsed.nodeId) {
+              setNodes((prev) =>
+                prev.map((n) =>
+                  n.id === parsed.nodeId
+                    ? { ...n, status: parsed.status === "COMPLETED" || parsed.status === "SUCCESS" ? "success" : "running" }
+                    : n
+                )
+              );
+            }
+          } catch {}
+        };
+        eventSource.onmessage = handleRunMessage;
+        eventSource.addEventListener("NODE_STATE_CHANGE", handleRunMessage as any);
+        eventSource.addEventListener("WORKFLOW_COMPLETED", handleRunMessage as any);
+        eventSource.onerror = () => {
+          eventSource?.close();
+        };
+      } catch {}
+    }
+
+    // 3. Topological visual progression
     const topoOrder =
       dagValidation.isValid && dagValidation.topologicalOrder.length > 0
         ? dagValidation.topologicalOrder
@@ -517,6 +571,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     setTimeout(() => {
       setIsRunning(false);
       setActiveEdgeIndex(-1);
+      eventSource?.close();
     }, topoOrder.length * 750 + 800);
   };
 
@@ -726,12 +781,17 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           const isAvailableTarget =
             connectingFromId !== null && connectingFromId !== node.id && node.category === "action";
 
+          const isDragging = draggingNodeId === node.id;
+
           return (
             <div
               key={node.id}
-              onClick={() => setSelectedNodeId(node.id)}
               onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-              className={`studio-node absolute w-[240px] rounded-2xl border p-3 pointer-events-auto select-none cursor-move transition-all duration-150 ${
+              className={`studio-node absolute w-[240px] rounded-2xl border p-3 pointer-events-auto select-none ${
+                isDragging
+                  ? "cursor-grabbing transition-none"
+                  : "cursor-grab transition-colors duration-150"
+              } ${
                 isSelected
                   ? isLight
                     ? "border-[#7FBF6A] bg-[#FFFFFF] shadow-[0_0_24px_rgba(127,191,106,0.35)] ring-2 ring-[#7FBF6A]"
@@ -869,127 +929,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
                   {node.detail}
                 </p>
 
-                {/* HTTP Request specific interactive parameters */}
-                {node.type === "http_request" && (
-                  <div className="mt-2.5 space-y-2 pt-2 border-t border-[#243026]/70">
-                    {/* Target URL */}
-                    <div className="rounded-xl bg-[#0C100D]/90 p-2 border border-[#243026]">
-                      <div className="flex items-center justify-between text-[8px] font-mono text-[#8B968B] mb-1">
-                        <span className="font-bold tracking-wider text-[#7FBF6A]">TARGET URL</span>
-                        <span className="rounded bg-[#7FBF6A]/20 px-1 py-0.2 text-[8px] font-bold text-[#7FBF6A]">
-                          {node.config?.method || "POST"}
-                        </span>
-                      </div>
-                      <input
-                        type="text"
-                        value={node.config?.url || "https://api.stripe.com/v1/charges"}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => updateNodeConfig(node.id, { url: e.target.value })}
-                        className="w-full bg-transparent font-mono text-[9.5px] text-[#E8ECE4] focus:text-[#7FBF6A] outline-none truncate"
-                        placeholder="https://api.domain.com/v1"
-                        title="Click to edit Target Endpoint URL"
-                      />
-                    </div>
 
-                    {/* Max Retries & Base Interval Steppers */}
-                    <div className="grid grid-cols-2 gap-1.5 font-mono text-[9px]">
-                      {/* Max Retries */}
-                      <div className="rounded-xl bg-[#0C100D]/90 p-1.5 border border-[#243026]">
-                        <div className="text-[7.5px] uppercase font-bold text-[#8B968B]">Max Retries</div>
-                        <div className="flex items-center justify-between mt-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateNodeConfig(node.id, {
-                                maxRetries: Math.max(0, (node.config?.maxRetries ?? 3) - 1),
-                              });
-                            }}
-                            className="h-4 w-4 rounded bg-[#243026] hover:bg-[#7FBF6A] hover:text-[#0C100D] text-[10px] font-bold flex items-center justify-center transition-colors cursor-pointer select-none"
-                            title="Decrease Max Retries"
-                          >
-                            -
-                          </button>
-                          <span className="font-bold text-[#7FBF6A] text-[10px]">
-                            {node.config?.maxRetries ?? 3}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateNodeConfig(node.id, {
-                                maxRetries: Math.min(10, (node.config?.maxRetries ?? 3) + 1),
-                              });
-                            }}
-                            className="h-4 w-4 rounded bg-[#243026] hover:bg-[#7FBF6A] hover:text-[#0C100D] text-[10px] font-bold flex items-center justify-center transition-colors cursor-pointer select-none"
-                            title="Increase Max Retries"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Base Interval */}
-                      <div className="rounded-xl bg-[#0C100D]/90 p-1.5 border border-[#243026]">
-                        <div className="text-[7.5px] uppercase font-bold text-[#8B968B]">Base Interval</div>
-                        <div className="flex items-center justify-between mt-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateNodeConfig(node.id, {
-                                baseBackoffMs: Math.max(100, (node.config?.baseBackoffMs ?? 1000) - 250),
-                              });
-                            }}
-                            className="h-4 w-4 rounded bg-[#243026] hover:bg-[#7FBF6A] hover:text-[#0C100D] text-[10px] font-bold flex items-center justify-center transition-colors cursor-pointer select-none"
-                            title="Decrease Base Interval"
-                          >
-                            -
-                          </button>
-                          <span className="font-bold text-[#7FBF6A] text-[10px]">
-                            {node.config?.baseBackoffMs ?? 1000}ms
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateNodeConfig(node.id, {
-                                baseBackoffMs: (node.config?.baseBackoffMs ?? 1000) + 250,
-                              });
-                            }}
-                            className="h-4 w-4 rounded bg-[#243026] hover:bg-[#7FBF6A] hover:text-[#0C100D] text-[10px] font-bold flex items-center justify-center transition-colors cursor-pointer select-none"
-                            title="Increase Base Interval"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* T3.3 Full Jitter & T3.4 DLQ Badges */}
-                    <div className="flex items-center justify-between pt-0.5 text-[8px] font-mono">
-                      <span className="text-[#7FBF6A] font-semibold flex items-center gap-1">
-                        <Zap className="h-2.5 w-2.5" /> Full Jitter
-                      </span>
-                      <span className="text-[#E5735C] font-semibold flex items-center gap-1">
-                        <ShieldCheck className="h-2.5 w-2.5" /> DLQ Routing
-                      </span>
-                    </div>
-
-                    {/* Open Inspector Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedNodeId(node.id);
-                      }}
-                      className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-[#7FBF6A]/30 bg-[#7FBF6A]/10 py-1 text-[9px] font-mono font-bold text-[#7FBF6A] hover:bg-[#7FBF6A]/20 transition-all cursor-pointer"
-                    >
-                      <Settings2 className="h-3 w-3" />
-                      <span>Configure Parameters & Formula</span>
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           );
@@ -998,7 +938,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
 
       {/* ── Top Left: Execute & Reset Workflow Toolbar (In place of Dormammu Engine Canvas) ── */}
       <div
-        className={`canvas-control pointer-events-auto absolute top-24 left-6 z-40 flex items-center gap-2 rounded-xl border p-1.5 backdrop-blur-md ${
+        className={`canvas-control pointer-events-auto absolute top-18 sm:top-24 left-3 sm:left-6 z-40 flex items-center gap-1.5 sm:gap-2 rounded-xl border p-1 sm:p-1.5 backdrop-blur-md ${
           isLight
             ? "border-[#E2E6E3] bg-[#FAFAF9]/95 shadow-[0_10px_30px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,1)]"
             : "border-[#243026] bg-[#141A15]/90 shadow-2xl"
@@ -1007,7 +947,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         <button
           onClick={resetWorkflow}
           type="button"
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 ${
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 sm:px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 ${
             isLight
               ? "border-[#E2E6E3] bg-[#F0F2F0] text-[#667268] hover:text-[#111814] hover:border-[#7FBF6A]/50"
               : "border-[#243026] bg-[#0C100D] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40"
@@ -1022,40 +962,18 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           onClick={runWorkflow}
           disabled={isRunning || !dagValidation.isValid}
           type="button"
-          className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] text-[#0C100D] shadow-[0_0_15px_rgba(127,191,106,0.3)] px-4 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] text-[#0C100D] shadow-[0_0_15px_rgba(127,191,106,0.3)] px-3 sm:px-4 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
           title="Simulate DAG Execution"
         >
           <Play className={`h-3.5 w-3.5 fill-current ${isRunning ? "animate-pulse" : ""}`} />
-          <span>{isRunning ? "Executing..." : "Execute Workflow"}</span>
-        </button>
-
-        <div className={`h-4 w-[1px] ${isLight ? "bg-[#E2E6E3]" : "bg-[#243026]"}`} />
-
-        {/* Node Parameter Inspector Quick Toggle */}
-        <button
-          onClick={() => setSelectedNodeId(selectedNodeId === "http_1" ? null : "http_1")}
-          type="button"
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 ${
-            selectedNodeId === "http_1"
-              ? "border-[#7FBF6A] bg-[#7FBF6A]/20 text-[#7FBF6A] shadow-[0_0_12px_rgba(127,191,106,0.25)]"
-              : isLight
-                ? "border-[#E2E6E3] bg-[#F0F2F0] text-[#667268] hover:text-[#111814]"
-                : "border-[#243026] bg-[#0C100D] text-[#8B968B] hover:text-[#E8ECE4]"
-          }`}
-          title="Toggle Node Configuration Inspector (Target URL, Retries, Jitter Backoff)"
-        >
-          <Settings2 className="h-3.5 w-3.5 text-[#7FBF6A]" />
-          <span>
-            {selectedNodeId === "http_1" ? "Hide Inspector" : "Node Inspector"} (Retries:{" "}
-            {nodes.find((n) => n.id === "http_1")?.config?.maxRetries ?? 3} | Base:{" "}
-            {nodes.find((n) => n.id === "http_1")?.config?.baseBackoffMs ?? 1000}ms)
-          </span>
+          <span>{isRunning ? "Executing..." : "Execute"}</span>
+          <span className="hidden sm:inline">{isRunning ? "" : " Workflow"}</span>
         </button>
       </div>
 
       {/* ── Bottom Right: Zoom & Center Controls ── */}
       <div
-        className={`canvas-control pointer-events-auto absolute bottom-6 right-6 z-20 flex items-center gap-1 rounded-xl border p-1 backdrop-blur-md ${
+        className={`canvas-control pointer-events-auto absolute bottom-4 sm:bottom-6 right-3 sm:right-6 z-20 flex items-center gap-1 rounded-xl border p-1 backdrop-blur-md ${
           isLight
             ? "border-[#E2E6E3] bg-[#FAFAF9]/95 shadow-[0_10px_30px_rgba(0,0,0,0.06)] text-[#667268]"
             : "border-[#243026] bg-[#141A15]/90 shadow-2xl text-[#8B968B]"
@@ -1095,9 +1013,9 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         </button>
       </div>
 
-      {/* ── Bottom Left: Dormammu Engine Canvas Status Card ── */}
+      {/* ── Bottom Left: Dormammu Engine Canvas Status Card (Hidden on mobile to avoid overlapping controls) ── */}
       <div
-        className={`canvas-control pointer-events-auto absolute bottom-6 left-6 z-20 flex items-center gap-3 rounded-xl border px-3.5 py-2.5 backdrop-blur-md ${
+        className={`canvas-control pointer-events-auto hidden md:flex absolute bottom-6 left-6 z-20 items-center gap-3 rounded-xl border px-3.5 py-2.5 backdrop-blur-md ${
           isLight
             ? "border-[#E2E6E3] bg-[#FAFAF9]/95 shadow-[0_10px_30px_rgba(0,0,0,0.06)]"
             : "border-[#243026] bg-[#141A15]/90 shadow-2xl"
@@ -1142,11 +1060,11 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
       </div>
 
       {/* ── Bottom Center: Drop-Up Desk Toggle Button ── */}
-      <div className="canvas-control pointer-events-auto absolute bottom-5 left-1/2 -translate-x-1/2 z-30">
+      <div className="canvas-control pointer-events-auto absolute bottom-4 sm:bottom-5 left-1/2 -translate-x-1/2 z-30">
         <button
           onClick={() => setIsDrawerOpen(!isDrawerOpen)}
           type="button"
-          className={`flex items-center gap-2.5 rounded-full border px-5 py-2.5 text-xs font-mono font-semibold transition-all cursor-pointer select-none active:scale-95 group backdrop-blur-xl ${
+          className={`flex items-center gap-2 sm:gap-2.5 rounded-full border px-3.5 sm:px-5 py-2 sm:py-2.5 text-xs font-mono font-semibold transition-all cursor-pointer select-none active:scale-95 group backdrop-blur-xl ${
             isLight
               ? "border-[#7FBF6A]/40 bg-[#FAFAF9]/95 text-[#111814] hover:bg-[#F0F2F0] hover:border-[#7FBF6A] shadow-[0_4px_24px_rgba(0,0,0,0.08),0_0_20px_rgba(127,191,106,0.15)]"
               : "border-[#7FBF6A]/50 bg-[#141A15]/95 text-[#E8ECE4] hover:text-white hover:border-[#7FBF6A] hover:bg-[#1A221C] shadow-[0_4px_24px_rgba(0,0,0,0.8),0_0_20px_rgba(127,191,106,0.25)]"
@@ -1159,7 +1077,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           >
             <Plus className="h-3.5 w-3.5" />
           </div>
-          <span>Node Desk (5 Cards)</span>
+          <span><span className="hidden sm:inline">Node Desk </span>(5 Cards)</span>
           <ChevronUp
             className={`h-4 w-4 transition-transform duration-300 text-[#7FBF6A] ${
               isDrawerOpen ? "rotate-180" : ""
@@ -1175,7 +1093,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         }`}
       >
         <div
-          className={`mx-auto max-w-6xl rounded-t-3xl border-t border-x p-5 backdrop-blur-2xl ${
+          className={`mx-auto max-w-6xl max-h-[80vh] overflow-y-auto rounded-t-3xl border-t border-x p-4 sm:p-5 backdrop-blur-2xl ${
             isLight
               ? "border-[#E2E6E3] bg-[#FAFAF9]/98 shadow-[0_-12px_45px_rgba(0,0,0,0.08)]"
               : "border-[#243026] bg-[#0E1310]/98 shadow-[0_-12px_45px_rgba(0,0,0,0.9)]"
@@ -1289,34 +1207,10 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         </div>
       </div>
 
-      {/* ── Floating Node Inspector Button when Drawer Closed ── */}
-      {!selectedNode && (
-        <button
-          onClick={() => setSelectedNodeId("http_1")}
-          className={`canvas-control pointer-events-auto fixed top-20 right-6 z-40 flex items-center gap-2.5 rounded-2xl border px-3.5 py-2 shadow-2xl backdrop-blur-md transition-all cursor-pointer select-none hover:scale-105 active:scale-95 ${
-            isLight
-              ? "border-[#7FBF6A]/50 bg-white/95 text-[#111814] shadow-[0_10px_30px_rgba(0,0,0,0.1)]"
-              : "border-[#7FBF6A]/50 bg-[#141A15]/95 text-[#E8ECE4] shadow-[0_10px_30px_rgba(0,0,0,0.8)]"
-          }`}
-          title="Open Node Configuration Inspector (Target URL, Retries, Jitter Backoff)"
-        >
-          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-[#7FBF6A]/20 text-[#7FBF6A]">
-            <Settings2 className="h-4 w-4" />
-          </div>
-          <div className="text-left font-mono">
-            <div className="text-[11px] font-bold text-[#7FBF6A] flex items-center gap-1">
-              <span>Node Parameters</span>
-              <span className="rounded bg-[#7FBF6A]/20 px-1 text-[8px]">T3.3/T3.4</span>
-            </div>
-            <div className="text-[9px] text-[#8B968B]">HTTP: Retries & Base Interval</div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Right: Node Configuration Inspector Drawer (T5.4 & T3.3/T3.4 Visualizer) ── */}
+      {/* ── Right: Node Configuration Inspector Drawer ── */}
       {selectedNode && (
         <div
-          className={`canvas-control pointer-events-auto fixed top-20 right-6 z-50 w-[420px] max-h-[calc(100vh-120px)] overflow-y-auto rounded-3xl border p-5 shadow-2xl backdrop-blur-2xl ring-1 ring-[#7FBF6A]/30 animate-in fade-in slide-in-from-right-4 duration-150 ${
+          className={`canvas-control pointer-events-auto fixed top-18 sm:top-20 right-3 sm:right-6 z-50 w-[calc(100vw-1.5rem)] sm:w-[420px] max-w-[420px] max-h-[calc(100vh-90px)] sm:max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl sm:rounded-3xl border p-4 sm:p-5 shadow-2xl backdrop-blur-2xl ring-1 ring-[#7FBF6A]/30 animate-in fade-in slide-in-from-right-4 duration-150 ${
             isLight
               ? "border-[#E2E6E3] bg-[#FFFFFF]/98 text-[#111814] shadow-[0_20px_50px_rgba(0,0,0,0.15)]"
               : "border-[#243026] bg-[#141A15]/98 text-[#E8ECE4] shadow-[0_25px_60px_rgba(0,0,0,0.9)]"
@@ -1462,38 +1356,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
                   />
                 </div>
 
-                {/* T3.3 Full Jitter Strategy Callout */}
-                <div
-                  className={`rounded-2xl border p-3 font-mono text-[11px] ${
-                    isLight ? "border-[#7FBF6A]/30 bg-[#7FBF6A]/10" : "border-[#7FBF6A]/30 bg-[#0C100D]"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 text-[#7FBF6A] font-bold mb-1">
-                    <Zap className="h-3.5 w-3.5" />
-                    <span>T3.3 BullMQ Backoff Strategy</span>
-                  </div>
-                  <p className="text-[10px] text-[#8B968B] leading-relaxed">
-                    Math.floor(random() × min(cap, base × 2^attempt))
-                  </p>
-                  <div className="mt-2 text-[10px] text-[#7FBF6A] font-bold">
-                    ✓ Full Jitter Enabled (Prevents downstream DDoS)
-                  </div>
-                </div>
 
-                {/* T3.4 DLQ Routing Callout */}
-                <div
-                  className={`rounded-2xl border p-3 font-mono text-[11px] ${
-                    isLight ? "border-[#E5735C]/30 bg-[#E5735C]/10" : "border-[#E5735C]/30 bg-[#0C100D]"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 text-[#E5735C] font-bold mb-1">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    <span>T3.4 Dead-Letter Queue (DLQ)</span>
-                  </div>
-                  <p className="text-[10px] text-[#8B968B] leading-relaxed">
-                    If attempts ≥ {selectedNode.config?.maxRetries ?? 3}, job routes to DLQ, persists failure context to PostgreSQL, and halts downstream dependent nodes.
-                  </p>
-                </div>
               </>
             )}
 

@@ -2,17 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import {
-  Rotate3d,
-  Terminal,
-  Activity,
-  Cpu,
-  CheckCircle2,
-  Zap,
-  ArrowRight,
-  Workflow,
-  Radio,
-} from "lucide-react";
+import { Rotate3d, Terminal } from "lucide-react";
 
 interface WorkflowVisualizer3DProps {
   className?: string;
@@ -41,13 +31,15 @@ export function WorkflowVisualizer3D({ className = "" }: WorkflowVisualizer3DPro
         animate={{ rotateY: isFlipped ? 180 : 0 }}
         transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
         style={{ transformStyle: "preserve-3d" }}
-        className="relative w-full min-h-[440px]"
+        className="relative w-full h-[380px] sm:h-[390px] cursor-pointer select-none"
+        title="Click anywhere to 3D flip"
       >
         {/* ══════════════════════════════════════════════════════════════
             FRONT FACE: 3D Pipeline Architecture DAG SVG
             ══════════════════════════════════════════════════════════════ */}
         <div
-          className="rounded-2xl border border-[#243026] bg-[#141A15] p-4 sm:p-5 shadow-2xl relative w-full h-full flex flex-col justify-between"
+          onClick={toggleFlip}
+          className="absolute inset-0 rounded-2xl border border-[#243026] bg-[#141A15] p-4 sm:p-5 shadow-2xl flex flex-col justify-between select-none"
           style={{
             transform: "rotateY(0deg)",
             backfaceVisibility: "hidden",
@@ -60,8 +52,8 @@ export function WorkflowVisualizer3D({ className = "" }: WorkflowVisualizer3DPro
               "0 25px 60px -15px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)",
           }}
         >
-          {/* Top Bar with Live Indicator & Prominent Flip Button */}
-          <div className="relative z-10 flex items-center justify-between pb-3 mb-3 border-b border-[#243026]/80 text-[11px] font-mono">
+          {/* Top Bar with Live Indicator */}
+          <div className="relative z-10 flex items-center justify-between pb-3 mb-2 border-b border-[#243026]/80 text-[11px] font-mono">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#7FBF6A] opacity-75" />
@@ -71,19 +63,11 @@ export function WorkflowVisualizer3D({ className = "" }: WorkflowVisualizer3DPro
               <span className="text-[#7FBF6A] font-semibold">order_settlement_dag.v3</span>
             </div>
 
-            <button
-              onClick={toggleFlip}
-              type="button"
-              className="flex items-center gap-2 rounded-xl border border-[#7FBF6A] bg-[#7FBF6A]/15 px-3 py-1.5 text-xs font-mono font-bold text-[#7FBF6A] hover:bg-[#7FBF6A] hover:text-[#0C100D] transition-all cursor-pointer select-none active:scale-95 shadow-[0_0_12px_rgba(127,191,106,0.25)]"
-              title="Click to 3D Flip to Live Execution View"
-            >
-              <Rotate3d className="h-4 w-4" />
-              <span>3D FLIP TO EXECUTION</span>
-            </button>
+            <Rotate3d className="h-3.5 w-3.5 text-[#7FBF6A]" />
           </div>
 
           {/* Responsive Animated SVG Diagram */}
-          <div className="relative z-10 my-auto cursor-pointer" onClick={toggleFlip} title="Click anywhere to 3D flip">
+          <div className="relative z-10 my-auto">
             <svg
               viewBox="0 0 760 210"
               className="w-full h-auto select-none"
@@ -211,10 +195,11 @@ export function WorkflowVisualizer3D({ className = "" }: WorkflowVisualizer3DPro
         </div>
 
         {/* ══════════════════════════════════════════════════════════════
-            BACK FACE: Live 3D Node Execution Trace & Logs
+            BACK FACE: Clean Live 3D Node Execution Trace
             ══════════════════════════════════════════════════════════════ */}
         <div
-          className="absolute inset-0 rounded-2xl border border-[#243026] bg-[#0E1410] p-4 sm:p-5 shadow-2xl flex flex-col justify-between"
+          onClick={toggleFlip}
+          className="absolute inset-0 rounded-2xl border border-[#243026] bg-[#141A15] p-4 sm:p-5 shadow-2xl flex flex-col justify-between select-none"
           style={{
             transform: "rotateY(180deg)",
             backfaceVisibility: "hidden",
@@ -227,125 +212,74 @@ export function WorkflowVisualizer3D({ className = "" }: WorkflowVisualizer3DPro
               "0 25px 60px -15px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)",
           }}
         >
-          {/* Top Bar with Flip Back Button */}
-          <div className="relative z-10 flex items-center justify-between pb-3 border-b border-[#243026]/80 text-[11px] font-mono">
+          {/* Top Bar with Live Indicator */}
+          <div className="relative z-10 flex items-center justify-between pb-3 mb-2 border-b border-[#243026]/80 text-[11px] font-mono">
             <div className="flex items-center gap-2">
               <Terminal className="h-3.5 w-3.5 text-[#7FBF6A]" />
-              <span className="text-[#E8ECE4] font-medium">LIVE NODE EXECUTION TRACE</span>
-              <span className="rounded bg-[#7FBF6A]/15 px-1.5 py-0.5 text-[9px] text-[#7FBF6A] font-semibold">
-                ACTIVE PIPELINE
+              <span className="text-[#8B968B] font-medium">EXECUTION:</span>
+              <span className="text-[#7FBF6A] font-semibold">live_trace_stream</span>
+            </div>
+
+            <Rotate3d className="h-3.5 w-3.5 text-[#7FBF6A]" />
+          </div>
+
+          {/* Clean Real-time Pipeline Execution Stream */}
+          <div className="relative z-10 my-auto rounded-xl border border-[#243026] bg-[#0A0E0B] p-3 font-mono space-y-2">
+            <div className="flex items-center justify-between text-[10px] text-[#8B968B] pb-1.5 border-b border-[#243026]/70">
+              <span className="flex items-center gap-1.5 text-[#7FBF6A] font-semibold">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#7FBF6A] animate-ping" />
+                ACTIVE DISPATCH
               </span>
+              <span>DAG BUFFER: 100% HEALTH</span>
             </div>
 
-            <button
-              onClick={toggleFlip}
-              type="button"
-              className="flex items-center gap-2 rounded-xl border border-[#7FBF6A] bg-[#7FBF6A]/15 px-3 py-1.5 text-xs font-mono font-bold text-[#7FBF6A] hover:bg-[#7FBF6A] hover:text-[#0C100D] transition-all cursor-pointer select-none active:scale-95 shadow-[0_0_12px_rgba(127,191,106,0.25)]"
-              title="Click to 3D Flip back to Blueprint"
-            >
-              <Rotate3d className="h-4 w-4" />
-              <span>FLIP TO BLUEPRINT</span>
-            </button>
-          </div>
-
-          {/* 5-Node Animated Execution Pipeline Strip */}
-          <div className="relative z-10 my-3 grid grid-cols-5 gap-1.5 sm:gap-2">
-            {[
-              { id: 0, title: "INGEST", desc: "POST /event", time: "0.2ms" },
-              { id: 1, title: "KAHN DFS", desc: "3-Color Guard", time: "0.9ms" },
-              { id: 2, title: "LUA MUTEX", desc: "SETNX token", time: "1.4ms" },
-              { id: 3, title: "BULLMQ", desc: "Worker #04", time: "2.1ms" },
-              { id: 4, title: "RECEIPT", desc: "ACK 200 OK", time: "2.8ms" },
-            ].map((node) => {
-              const isActive = activeStep === node.id;
-              const isPast = activeStep > node.id;
-              return (
-                <div
-                  key={node.id}
-                  className={`relative rounded-xl border p-2 sm:p-2.5 font-mono transition-all duration-300 ${
-                    isActive
-                      ? "border-[#7FBF6A] bg-[#7FBF6A]/20 shadow-[0_0_15px_rgba(127,191,106,0.3)] scale-[1.03]"
-                      : isPast
-                      ? "border-[#243026] bg-[#141A15]/80 opacity-90"
-                      : "border-[#243026]/60 bg-[#0C100D]/60 opacity-40"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span
-                      className={`text-[9px] font-bold ${
-                        isActive ? "text-[#7FBF6A]" : "text-[#8B968B]"
-                      }`}
-                    >
-                      {node.title}
-                    </span>
-                    {isActive ? (
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#7FBF6A] animate-ping" />
-                    ) : isPast ? (
-                      <CheckCircle2 className="h-2.5 w-2.5 text-[#7FBF6A]" />
-                    ) : null}
+            <div className="space-y-1.5 text-[11px]">
+              {[
+                { step: "01", name: "Webhook Ingestion", detail: "POST /orders/settle", time: "+0.2ms", status: "202 Accepted" },
+                { step: "02", name: "Kahn Cycle Detection", detail: "3-Color DFS Guard", time: "+0.9ms", status: "Acyclic (Pass)" },
+                { step: "03", name: "Redis Lua Mutex", detail: "SETNX atomic lock", time: "+1.4ms", status: "Acquired" },
+                { step: "04", name: "BullMQ Job Dispatch", detail: "Worker Pool #04", time: "+2.1ms", status: "Active" },
+                { step: "05", name: "State Persistence", detail: "PostgreSQL Sink", time: "+2.8ms", status: "ACK 200 OK" },
+              ].map((log, idx) => {
+                const isActive = activeStep === idx;
+                return (
+                  <div
+                    key={log.step}
+                    className={`flex items-center justify-between rounded-lg px-2.5 py-1 transition-colors ${
+                      isActive
+                        ? "bg-[#7FBF6A]/15 text-[#E8ECE4] border border-[#7FBF6A]/30"
+                        : "text-[#8B968B] border border-transparent"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold ${isActive ? "text-[#7FBF6A]" : "text-[#8B968B]"}`}>
+                        {log.step}
+                      </span>
+                      <span className="text-[11px] font-medium text-[#E8ECE4]">{log.name}</span>
+                      <span className="text-[10px] text-[#8B968B] hidden sm:inline font-mono">({log.detail})</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] font-mono">
+                      <span className="text-[#8B968B]">{log.time}</span>
+                      <span className={isActive ? "text-[#7FBF6A] font-bold" : "text-[#7FBF6A]/80"}>{log.status}</span>
+                    </div>
                   </div>
-                  <span className="block text-[10px] text-[#E8ECE4] truncate font-medium">
-                    {node.desc}
-                  </span>
-                  <span className="block text-[8.5px] text-[#8B968B] mt-0.5">
-                    {node.time}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Real-time Streaming Terminal Console */}
-          <div className="relative z-10 rounded-xl border border-[#243026] bg-[#080B09] p-3 font-mono text-[10.5px] space-y-1.5 overflow-hidden">
-            <div className="flex items-center justify-between text-[9px] text-[#8B968B] border-b border-[#243026]/70 pb-1.5 mb-1.5">
-              <span>DAG RUNTIME DISPATCH LOGS</span>
-              <span className="text-[#7FBF6A]">BUFFER HEALTH: 100%</span>
-            </div>
-            <div className="space-y-1 text-[10px] leading-relaxed">
-              <div className="flex items-center gap-2 text-[#8B968B]">
-                <span className="text-[#7FBF6A]">[+0.2ms]</span>
-                <span className="text-[#E8ECE4]">✓ Ingested payload:</span>
-                <span className="text-[#7FBF6A]">event_uuid: 8841-A9</span>
-              </div>
-              <div className="flex items-center gap-2 text-[#8B968B]">
-                <span className="text-[#7FBF6A]">[+0.9ms]</span>
-                <span className="text-[#E8ECE4]">↳ Kahn algorithm verified:</span>
-                <span className="text-[#7FBF6A]">0 cycles detected (Acyclic)</span>
-              </div>
-              <div className="flex items-center gap-2 text-[#8B968B]">
-                <span className="text-[#7FBF6A]">[+1.4ms]</span>
-                <span className="text-[#E8ECE4]">🔒 Temporal Mutex acquired:</span>
-                <span className="text-[#7FBF6A]">key: dag_mutex:402</span>
-              </div>
-              <div className="flex items-center gap-2 text-[#8B968B]">
-                <span className="text-[#7FBF6A]">[+2.1ms]</span>
-                <span className="text-[#E8ECE4]">⚡ BullMQ worker dispatch:</span>
-                <span className="text-[#7FBF6A]">Worker #04 [Active]</span>
-              </div>
-              <div className="flex items-center gap-2 text-[#8B968B]">
-                <span className="text-[#7FBF6A]">[+2.8ms]</span>
-                <span className="text-[#E8ECE4]">✓ State snapshot committed:</span>
-                <span className="text-[#E8ECE4]">Receipt ACK: 200 OK</span>
-              </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Bottom Execution Telemetry Bar */}
-          <div className="relative z-10 pt-3 border-t border-[#243026]/60 grid grid-cols-4 gap-2 text-center font-mono">
-            <div className="rounded-lg bg-[#080B09] border border-[#243026]/60 p-1.5">
-              <span className="block text-[8.5px] text-[#8B968B]">ENGINE FPS</span>
-              <span className="text-xs font-semibold text-[#7FBF6A]">60.0 FPS</span>
+          {/* Bottom Telemetry Strip - Matches Front Card Exactly */}
+          <div className="relative z-10 mt-2 pt-3 border-t border-[#243026]/60 grid grid-cols-3 gap-2 text-center font-mono">
+            <div className="rounded-lg bg-[#0C100D]/70 border border-[#243026]/60 p-2">
+              <span className="block text-[10px] text-[#8B968B]">ACTIVE WORKERS</span>
+              <span className="text-xs font-semibold text-[#7FBF6A]">20 / 20</span>
             </div>
-            <div className="rounded-lg bg-[#080B09] border border-[#243026]/60 p-1.5">
-              <span className="block text-[8.5px] text-[#8B968B]">ACTIVE WORKERS</span>
-              <span className="text-xs font-semibold text-[#E8ECE4]">20 / 20</span>
+            <div className="rounded-lg bg-[#0C100D]/70 border border-[#243026]/60 p-2">
+              <span className="block text-[10px] text-[#8B968B]">MEMORY HEAP</span>
+              <span className="text-xs font-semibold text-[#E8ECE4]">11.4 MB</span>
             </div>
-            <div className="rounded-lg bg-[#080B09] border border-[#243026]/60 p-1.5">
-              <span className="block text-[8.5px] text-[#8B968B]">HEAP USAGE</span>
-              <span className="text-xs font-semibold text-[#7FBF6A]">11.4 MB</span>
-            </div>
-            <div className="rounded-lg bg-[#080B09] border border-[#243026]/60 p-1.5">
-              <span className="block text-[8.5px] text-[#8B968B]">P99 LATENCY</span>
+            <div className="rounded-lg bg-[#0C100D]/70 border border-[#243026]/60 p-2">
+              <span className="block text-[10px] text-[#8B968B]">P99 LATENCY</span>
               <span className="text-xs font-semibold text-[#7FBF6A]">1.8 ms</span>
             </div>
           </div>

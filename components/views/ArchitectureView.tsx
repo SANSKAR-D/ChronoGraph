@@ -16,7 +16,7 @@ export function ArchitectureView({ theme = "dark" }: { theme?: "dark" | "light" 
   const [selectedSpec, setSelectedSpec] = useState<"dag" | "lua" | "worker" | "sse">("dag");
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 pt-24 pb-12 sm:pt-28 sm:px-6 lg:px-8 space-y-8">
+    <div className="mx-auto w-full max-w-7xl px-4 pt-24 pb-12 sm:pt-28 sm:px-6 lg:pl-8 lg:pr-48 space-y-8">
       {/* Architecture Header */}
       <div>
         <h2
@@ -58,8 +58,8 @@ export function ArchitectureView({ theme = "dark" }: { theme?: "dark" | "light" 
                 isSelected
                   ? "bg-[#7FBF6A] text-[#0C100D] font-bold shadow-md shadow-[#7FBF6A]/25 border border-[#7FBF6A]"
                   : isLight
-                  ? "border border-[#D1D9D0] bg-white text-[#5E695E] hover:text-[#141A15] hover:border-[#7FBF6A]"
-                  : "liquid-glass border border-[#243026] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/50 bg-[#141A15]/80"
+                  ? "border border-[#E2E6E3] bg-white text-[#5E695E] hover:text-[#141A15] hover:border-[#7FBF6A]"
+                  : "border border-[#243026] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/50 bg-[#141A15]"
               }`}
             >
               <Icon className="h-4 w-4" />
@@ -69,12 +69,12 @@ export function ArchitectureView({ theme = "dark" }: { theme?: "dark" | "light" 
         })}
       </div>
 
-      {/* Selected Specification Details (Liquid Glass Card) */}
+      {/* Selected Specification Details */}
       <div
-        className={`liquid-glass rounded-2xl p-6 space-y-4 border ${
+        className={`rounded-2xl p-6 space-y-4 border ${
           isLight
-            ? "border-[#D1D9D0] bg-[#FAFAF9]/90 shadow-sm"
-            : "border-[#243026] bg-[#141A15]/80 shadow-md"
+            ? "border-[#E2E6E3] bg-white shadow-xs"
+            : "border-[#243026] bg-[#141A15] shadow-xs"
         }`}
       >
         {selectedSpec === "dag" && (

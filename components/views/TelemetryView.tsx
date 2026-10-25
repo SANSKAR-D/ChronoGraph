@@ -12,35 +12,113 @@ interface WorkerNode {
 export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const isLight = theme === "light";
   const [streamActive, setStreamActive] = useState(true);
-  const [events, setEvents] = useState<Array<{ id: string; time: string; event: string; status: string; latency: number }>>([
-    { id: "evt_101", time: "11:20:12", event: "JOB_COMPLETED",        status: "SUCCESS",   latency: 12 },
-    { id: "evt_102", time: "11:20:13", event: "FAN_OUT_DECREMENT",    status: "RUNNING",   latency: 8 },
-    { id: "evt_103", time: "11:20:14", event: "IDEMPOTENCY_ACQUIRED", status: "SUCCESS",   latency: 4 },
-  ]);
+  const [events, setEvents] = useState<Array<{ id: string; time: string; event: string; status: string; latency: number }>>([]);
 
-  const [workers] = useState<WorkerNode[]>([
-    { id: "worker-us-east-1", name: "dag-worker-01", status: "healthy", concurrency: 8,  cpu: 24, memory: "182 MB", lastHeartbeat: "Just now" },
-    { id: "worker-us-east-2", name: "dag-worker-02", status: "busy",    concurrency: 10, cpu: 58, memory: "244 MB", lastHeartbeat: "1s ago" },
-    { id: "worker-eu-west-1", name: "dag-worker-03", status: "healthy", concurrency: 6,  cpu: 31, memory: "196 MB", lastHeartbeat: "Just now" },
-    { id: "worker-ap-south",  name: "dag-worker-04", status: "healthy", concurrency: 4,  cpu: 18, memory: "150 MB", lastHeartbeat: "2s ago" },
-  ]);
+  const [metrics, setMetrics] = useState({
+    waiting: 0,
+    active: 0,
+    delayed: 0,
+    dlq: 0,
+  });
+
+  const [workers, setWorkers] = useState<WorkerNode[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch("/api/v1/cluster/health");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active && data) {
+          if (data.queueMetrics) {
+            setMetrics({
+              waiting: data.queueMetrics.waiting ?? data.queueMetrics.Waiting ?? 0,
+              active: data.queueMetrics.active ?? data.queueMetrics.Active ?? 0,
+              delayed: data.queueMetrics.delayed ?? data.queueMetrics.Delayed ?? 0,
+              dlq: data.queueMetrics.dlq ?? data.queueMetrics.DLQ ?? 0,
+            });
+          }
+          if (Array.isArray(data.workers)) {
+            setWorkers(
+              data.workers.map((w: any) => ({
+                id: w.workerId || w.id || "worker",
+                name: w.name || w.workerId || "dag-worker",
+                status: w.status === "busy" ? "busy" : "healthy",
+                concurrency: w.concurrency ?? w.activeJobs ?? 0,
+                cpu: w.cpu ?? 0,
+                memory: w.memory || "0 MB",
+                lastHeartbeat: w.lastHeartbeat || "Just now",
+              }))
+            );
+          }
+          if (Array.isArray(data.recentEvents) && data.recentEvents.length > 0) {
+            setEvents((prev) => {
+              if (prev.length === 0) return data.recentEvents;
+              const existingIds = new Set(prev.map((e) => e.id));
+              const fresh = data.recentEvents.filter((e: any) => !existingIds.has(e.id));
+              return [...prev, ...fresh].slice(0, 50);
+            });
+          }
+        }
+      } catch {
+        // network error / dev server reload
+      }
+    };
+
+    fetchHealth();
+    const pollId = setInterval(fetchHealth, 4000);
+    return () => {
+      active = false;
+      clearInterval(pollId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!streamActive) return;
-    const interval = setInterval(() => {
-      const picks = [
-        { evt: "LUA_IN_DEGREE_DEC",   status: "SUCCESS" },
-        { evt: "BULLMQ_DISPATCH",      status: "RUNNING" },
-        { evt: "HTTP_NODE_RESOLVED",   status: "SUCCESS" },
-        { evt: "WORKER_HEARTBEAT",     status: "HEARTBEAT" },
-      ];
-      const pick = picks[Math.floor(Math.random() * picks.length)];
-      setEvents((prev) => [
-        { id: `evt_${Date.now()}`, time: new Date().toLocaleTimeString(), event: pick.evt, status: pick.status, latency: Math.floor(Math.random() * 18 + 5) },
-        ...prev.slice(0, 15),
-      ]);
-    }, 2500);
-    return () => clearInterval(interval);
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource("/api/v1/cluster/events");
+
+      const handleEvent = (dataStr: string) => {
+        try {
+          const parsed = JSON.parse(dataStr);
+          if (parsed.status === "connected" && !parsed.event) return;
+          const eventName = parsed.event || (parsed.nodeId ? `EXEC:${parsed.nodeId}` : "EVENT");
+          const status = parsed.status || (eventName.includes("FAIL") ? "FAILED" : "SUCCESS");
+          const latency = parsed.latency ?? (parsed.durationMs ? Math.round(parsed.durationMs) : 12);
+          const time = parsed.timestamp
+            ? new Date(parsed.timestamp).toLocaleTimeString()
+            : new Date().toLocaleTimeString();
+
+          setEvents((prev) => [
+            {
+              id: parsed.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              time,
+              event: eventName,
+              status,
+              latency,
+            },
+            ...prev.slice(0, 49),
+          ]);
+        } catch {
+          // ignore non-json keepalive
+        }
+      };
+
+      es.onmessage = (e) => handleEvent(e.data);
+      es.addEventListener("WORKFLOW_TRIGGERED", (e: any) => handleEvent(e.data));
+      es.addEventListener("NODE_STATE_CHANGE", (e: any) => handleEvent(e.data));
+      es.addEventListener("JOB_COMPLETED", (e: any) => handleEvent(e.data));
+    } catch {
+      // EventSource failed to instantiate
+    }
+
+    return () => {
+      if (es) {
+        es.close();
+      }
+    };
   }, [streamActive]);
 
   const statusColor = (s: string) =>
@@ -57,7 +135,7 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
       : "text-[#8B968B]";
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 pt-24 pb-12 sm:pt-28 sm:px-6 lg:px-8 space-y-8">
+    <div className="mx-auto w-full max-w-7xl px-4 pt-24 pb-12 sm:pt-28 sm:px-6 lg:pl-8 lg:pr-48 space-y-8">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -103,38 +181,38 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
         {[
           {
             label: "Waiting Jobs",
-            value: "12",
+            value: String(metrics.waiting),
             color: isLight ? "text-[#141A15]" : "text-[#E8ECE4]",
             bar: "bg-[#8B968B] w-[25%]",
           },
           {
             label: "Active Executing",
-            value: "4",
+            value: String(metrics.active),
             color: "text-[#7FBF6A]",
             bar: "bg-[#7FBF6A] w-[40%] shadow-[0_0_8px_rgba(127,191,106,0.4)]",
           },
           {
             label: "Delayed Transitions",
-            value: "2",
+            value: String(metrics.delayed),
             color: "text-[#E5B86A]",
             bar: "bg-[#E5B86A] w-[15%]",
           },
           {
             label: "Dead Letter Jobs",
-            value: "3",
+            value: String(metrics.dlq),
             color: "text-[#E5735C]",
             bar: "bg-[#E5735C] w-[10%] shadow-[0_0_8px_rgba(229,115,92,0.4)]",
           },
         ].map(({ label, value, color, bar }) => (
           <div
             key={label}
-            className={`liquid-glass rounded-2xl p-4 border transition-all ${
+            className={`rounded-2xl p-4 border transition-all ${
               isLight
-                ? "border-[#D1D9D0] bg-[#FAFAF9]/90 shadow-sm"
-                : "border-[#243026] bg-[#141A15]/80 shadow-md"
+                ? "border-[#E2E6E3] bg-white shadow-xs"
+                : "border-[#243026] bg-[#141A15] shadow-xs"
             }`}
           >
-            <div className="relative z-10">
+            <div>
               <p
                 className={`text-xs font-medium ${
                   isLight ? "text-[#5E695E]" : "text-[#8B968B]"
@@ -160,15 +238,15 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
 
       {/* Worker Pool Table */}
       <div
-        className={`liquid-glass rounded-2xl overflow-hidden border ${
+        className={`rounded-2xl overflow-hidden border ${
           isLight
-            ? "border-[#D1D9D0] bg-[#FAFAF9]/90 shadow-sm"
-            : "border-[#243026] bg-[#141A15]/80 shadow-md"
+            ? "border-[#E2E6E3] bg-white shadow-xs"
+            : "border-[#243026] bg-[#141A15] shadow-xs"
         }`}
       >
         <div
-          className={`relative z-10 p-4 border-b flex items-center justify-between ${
-            isLight ? "border-[#D1D9D0] bg-white/40" : "border-[#243026] bg-[#0C100D]/40"
+          className={`p-4 border-b flex items-center justify-between ${
+            isLight ? "border-[#E2E6E3] bg-[#F7F9F6]" : "border-[#243026] bg-[#0C100D]/60"
           }`}
         >
           <div className="flex items-center gap-2">
@@ -178,7 +256,7 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
                 isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
               }`}
             >
-              Active Worker Pool (4 Nodes)
+              Active Worker Pool ({workers.length} {workers.length === 1 ? "Node" : "Nodes"})
             </h3>
           </div>
           <span
@@ -211,62 +289,81 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
                   : "divide-[#243026] text-[#E8ECE4]"
               }`}
             >
-              {workers.map((w) => (
-                <tr
-                  key={w.id}
-                  className={`transition-colors ${
-                    isLight ? "hover:bg-[#F3F6F2]/80" : "hover:bg-[#1A221C]/60"
-                  }`}
-                >
+              {workers.length === 0 ? (
+                <tr>
                   <td
-                    className={`py-3 px-4 font-mono font-semibold ${
-                      isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
-                    }`}
-                  >
-                    {w.name}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${
-                        w.status === "busy"
-                          ? "bg-[#E5B86A]/15 text-[#E5B86A] border-[#E5B86A]/30"
-                          : "bg-[#7FBF6A]/15 text-[#7FBF6A] border-[#7FBF6A]/30"
-                      }`}
-                    >
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          w.status === "busy" ? "bg-[#E5B86A]" : "bg-[#7FBF6A] animate-pulse"
-                        }`}
-                      />
-                      {w.status}
-                    </span>
-                  </td>
-                  <td
-                    className={`py-3 px-4 font-mono ${
+                    colSpan={6}
+                    className={`py-8 text-center text-xs font-mono ${
                       isLight ? "text-[#5E695E]" : "text-[#8B968B]"
                     }`}
                   >
-                    {w.concurrency} / 10 jobs
-                  </td>
-                  <td
-                    className={`py-3 px-4 font-mono ${
-                      isLight ? "text-[#5E695E]" : "text-[#8B968B]"
-                    }`}
-                  >
-                    {w.cpu}%
-                  </td>
-                  <td
-                    className={`py-3 px-4 font-mono ${
-                      isLight ? "text-[#5E695E]" : "text-[#8B968B]"
-                    }`}
-                  >
-                    {w.memory}
-                  </td>
-                  <td className="py-3 px-4 text-[#7FBF6A] font-mono text-[11px]">
-                    {w.lastHeartbeat}
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      <Server className="h-5 w-5 opacity-40" />
+                      <span>No active background workers connected.</span>
+                      <span className="text-[10px] opacity-70">
+                        Run <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10">npm run worker</code> in a terminal to register BullMQ worker nodes.
+                      </span>
+                    </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                workers.map((w) => (
+                  <tr
+                    key={w.id}
+                    className={`transition-colors ${
+                      isLight ? "hover:bg-[#F3F6F2]/80" : "hover:bg-[#1A221C]/60"
+                    }`}
+                  >
+                    <td
+                      className={`py-3 px-4 font-mono font-semibold ${
+                        isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+                      }`}
+                    >
+                      {w.name}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${
+                          w.status === "busy"
+                            ? "bg-[#E5B86A]/15 text-[#E5B86A] border-[#E5B86A]/30"
+                            : "bg-[#7FBF6A]/15 text-[#7FBF6A] border-[#7FBF6A]/30"
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            w.status === "busy" ? "bg-[#E5B86A]" : "bg-[#7FBF6A] animate-pulse"
+                          }`}
+                        />
+                        {w.status}
+                      </span>
+                    </td>
+                    <td
+                      className={`py-3 px-4 font-mono ${
+                        isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                      }`}
+                    >
+                      {w.concurrency} / 10 jobs
+                    </td>
+                    <td
+                      className={`py-3 px-4 font-mono ${
+                        isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                      }`}
+                    >
+                      {w.cpu}%
+                    </td>
+                    <td
+                      className={`py-3 px-4 font-mono ${
+                        isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                      }`}
+                    >
+                      {w.memory}
+                    </td>
+                    <td className="py-3 px-4 text-[#7FBF6A] font-mono text-[11px]">
+                      {w.lastHeartbeat}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -274,15 +371,15 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
 
       {/* SSE Real-Time Stream */}
       <div
-        className={`liquid-glass rounded-2xl p-5 border ${
+        className={`rounded-2xl p-5 border ${
           isLight
-            ? "border-[#D1D9D0] bg-[#FAFAF9]/90 shadow-sm"
-            : "border-[#243026] bg-[#141A15]/80 shadow-md"
+            ? "border-[#E2E6E3] bg-white shadow-xs"
+            : "border-[#243026] bg-[#141A15] shadow-xs"
         }`}
       >
         <div
-          className={`relative z-10 flex items-center justify-between pb-3 border-b ${
-            isLight ? "border-[#D1D9D0]" : "border-[#243026]"
+          className={`flex items-center justify-between pb-3 border-b ${
+            isLight ? "border-[#E2E6E3]" : "border-[#243026]"
           }`}
         >
           <div className="flex items-center gap-2">
@@ -304,43 +401,60 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
           </span>
         </div>
         <div className="relative z-10 mt-3 space-y-2">
-          {events.map((evt) => (
+          {events.length === 0 ? (
             <div
-              key={evt.id}
-              className={`flex items-center justify-between font-mono text-xs p-2.5 rounded-xl border ${
+              className={`flex flex-col items-center justify-center p-8 text-center rounded-xl border border-dashed ${
                 isLight
-                  ? "bg-[#ECEFEA] border-[#D1D9D0]"
-                  : "bg-[#0C100D]/80 border-[#243026]"
+                  ? "border-[#D1D9D0] bg-[#F7F9F6] text-[#5E695E]"
+                  : "border-[#243026] bg-[#0C100D]/40 text-[#8B968B]"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <span
-                  className={`text-[11px] ${
-                    isLight ? "text-[#8B968B]" : "text-[#5E695E]"
-                  }`}
-                >
-                  {evt.time}
-                </span>
-                <span
-                  className={`font-semibold ${
-                    isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
-                  }`}
-                >
-                  {evt.event}
-                </span>
-                <span className={`text-[10px] font-bold ${statusColor(evt.status)}`}>
-                  {evt.status}
-                </span>
-              </div>
-              <span
-                className={`font-bold text-[11px] ${
-                  isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+              <Activity className="h-5 w-5 text-[#7FBF6A] mb-1.5 opacity-70" />
+              <p className="text-xs font-semibold">Event stream on standby (connected to Redis)</p>
+              <p className="text-[11px] opacity-75 mt-0.5">
+                No live events yet. Execute a workflow in Studio to stream real-time cluster events.
+              </p>
+            </div>
+          ) : (
+            events.map((evt) => (
+              <div
+                key={evt.id}
+                className={`flex items-center justify-between font-mono text-xs p-2.5 rounded-xl border ${
+                  isLight
+                    ? "bg-[#ECEFEA] border-[#D1D9D0]"
+                    : "bg-[#0C100D]/80 border-[#243026]"
                 }`}
               >
-                {evt.latency}ms
-              </span>
-            </div>
-          ))}
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  <span
+                    className={`text-[11px] shrink-0 ${
+                      isLight ? "text-[#8B968B]" : "text-[#5E695E]"
+                    }`}
+                  >
+                    {evt.time}
+                  </span>
+                  <span
+                    className={`font-semibold truncate max-w-[130px] sm:max-w-xs md:max-w-md ${
+                      isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+                    }`}
+                    title={evt.event}
+                  >
+                    {evt.event}
+                  </span>
+                  <span className={`text-[10px] font-bold shrink-0 ${statusColor(evt.status)}`}>
+                    {evt.status}
+                  </span>
+                </div>
+                <span
+                  className={`font-bold text-[11px] shrink-0 ml-2 ${
+                    isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                  }`}
+                >
+                  {evt.latency}ms
+                </span>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
