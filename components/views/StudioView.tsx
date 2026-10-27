@@ -122,95 +122,202 @@ export const CORE_NODE_TEMPLATES: NodeTemplate[] = [
   },
 ];
 
-const INITIAL_NODES: WorkflowNode[] = [
-  {
-    id: "wh_1",
-    name: "Webhook Trigger",
-    type: "webhook_trigger",
-    category: "trigger",
-    status: "idle",
-    detail: "POST /api/v1/orders/settle",
-    badge: "TRIGGER",
-    x: 100,
-    y: 200,
-    config: {
-      url: "/api/v1/hooks/orders_settle",
-      method: "POST",
-    },
-  },
-  {
-    id: "cron_1",
-    name: "Cron Trigger",
-    type: "cron_trigger",
-    category: "trigger",
-    status: "idle",
-    detail: "0 * * * * (Hourly Sync)",
-    badge: "CRON",
-    x: 100,
-    y: 380,
-    config: {
-      cronExpression: "0 * * * *",
-    },
-  },
-  {
-    id: "trans_1",
-    name: "Transform / Script",
-    type: "transform_script",
-    category: "action",
-    status: "idle",
-    detail: "payload.items.map(i => i.id)",
-    badge: "TRANSFORM",
-    x: 430,
-    y: 290,
-    config: {
-      script: "payload.items.map(i => i.id)",
-    },
-  },
-  {
-    id: "http_1",
-    name: "HTTP Request",
-    type: "http_request",
-    category: "action",
-    status: "idle",
-    detail: "POST https://api.stripe.com/v1",
-    badge: "HTTP ACTION",
-    x: 760,
-    y: 290,
-    config: {
-      url: "https://api.stripe.com/v1/charges",
-      method: "POST",
-      maxRetries: 3,
-      baseBackoffMs: 1000,
-      maxBackoffCapMs: 30000,
-    },
-  },
-  {
-    id: "delay_1",
-    name: "Delay Node",
-    type: "delay_timer",
-    category: "action",
-    status: "idle",
-    detail: "Sleep 5000ms // BullMQ ZSET",
-    badge: "DELAY",
-    x: 1090,
-    y: 290,
-    config: {
-      delayMs: 5000,
-    },
-  },
-];
+export interface DemoTemplate {
+  id: string;
+  name: string;
+  shortLabel: string;
+  badge: string;
+  description: string;
+  nodes: WorkflowNode[];
+  connections: Connection[];
+}
 
-const INITIAL_CONNECTIONS: Connection[] = [
-  { from: "wh_1", to: "trans_1" },
-  { from: "cron_1", to: "trans_1" },
-  { from: "trans_1", to: "http_1" },
-  { from: "http_1", to: "delay_1" },
+export const PRESEEDED_DEMO_TEMPLATES: DemoTemplate[] = [
+  {
+    id: "diamond",
+    name: "Diamond Payment Settlement DAG",
+    shortLabel: "Diamond Payment",
+    badge: "FAN-OUT / FAN-IN",
+    description: "Parallel fan-out & atomic fan-in DAG",
+    nodes: [
+      {
+        id: "node_webhook",
+        name: "Webhook Ingestion",
+        type: "webhook_trigger",
+        category: "trigger",
+        status: "idle",
+        detail: "POST /api/v1/hooks/orders_settle",
+        badge: "TRIGGER",
+        x: 80,
+        y: 220,
+        config: {
+          url: "/api/v1/hooks/orders_settle",
+          method: "POST",
+        },
+      },
+      {
+        id: "node_fraud",
+        name: "Fraud Risk Scoring",
+        type: "http_request",
+        category: "action",
+        status: "idle",
+        detail: "GET https://httpbin.org/get",
+        badge: "HTTP GET",
+        x: 440,
+        y: 110,
+        config: {
+          url: "https://httpbin.org/get",
+          method: "GET",
+        },
+      },
+      {
+        id: "node_inventory",
+        name: "Reserve Stock",
+        type: "transform_script",
+        category: "action",
+        status: "idle",
+        detail: "payload.items.map(i => i.sku)",
+        badge: "TRANSFORM",
+        x: 440,
+        y: 330,
+        config: {
+          script: "payload.items.map(i => i.sku)",
+        },
+      },
+      {
+        id: "node_stripe",
+        name: "Stripe Settlement",
+        type: "http_request",
+        category: "action",
+        status: "idle",
+        detail: "POST https://httpbin.org/post",
+        badge: "HTTP POST",
+        x: 800,
+        y: 220,
+        config: {
+          url: "https://httpbin.org/post",
+          method: "POST",
+          maxRetries: 3,
+          baseBackoffMs: 1000,
+          maxBackoffCapMs: 30000,
+        },
+      },
+    ],
+    connections: [
+      { from: "node_webhook", to: "node_fraud" },
+      { from: "node_webhook", to: "node_inventory" },
+      { from: "node_fraud", to: "node_stripe" },
+      { from: "node_inventory", to: "node_stripe" },
+    ],
+  },
+  {
+    id: "chaos",
+    name: "Chaos Flaky API Pipeline",
+    shortLabel: "Chaos Flaky",
+    badge: "EXPONENTIAL JITTER",
+    description: "Exponential backoff + jitter & DLQ replay",
+    nodes: [
+      {
+        id: "node_chaos_trigger",
+        name: "Webhook Ingestion",
+        type: "webhook_trigger",
+        category: "trigger",
+        status: "idle",
+        detail: "POST /api/v1/hooks/chaos_flaky",
+        badge: "TRIGGER",
+        x: 120,
+        y: 220,
+        config: {
+          url: "/api/v1/hooks/chaos_flaky",
+          method: "POST",
+        },
+      },
+      {
+        id: "node_flaky_http",
+        name: "Unreliable Gateway (503)",
+        type: "http_request",
+        category: "action",
+        status: "idle",
+        detail: "POST https://httpbin.org/status/503",
+        badge: "HTTP POST",
+        x: 480,
+        y: 220,
+        config: {
+          url: "https://httpbin.org/status/503",
+          method: "POST",
+          maxRetries: 3,
+          baseBackoffMs: 1000,
+          maxBackoffCapMs: 30000,
+        },
+      },
+    ],
+    connections: [
+      { from: "node_chaos_trigger", to: "node_flaky_http" },
+    ],
+  },
+  {
+    id: "cron",
+    name: "Cron Data Sync Pipeline",
+    shortLabel: "Cron Data Sync",
+    badge: "RECURRING CRON",
+    description: "Scheduled recurring pipeline & JSON transform",
+    nodes: [
+      {
+        id: "node_cron_trigger",
+        name: "Cron Trigger",
+        type: "cron_trigger",
+        category: "trigger",
+        status: "idle",
+        detail: "Every 5 mins (*/5 * * * *)",
+        badge: "CRON",
+        x: 100,
+        y: 220,
+        config: {
+          cronExpression: "*/5 * * * *",
+        },
+      },
+      {
+        id: "node_http_fetch",
+        name: "Fetch Market Tickers",
+        type: "http_request",
+        category: "action",
+        status: "idle",
+        detail: "GET https://httpbin.org/get",
+        badge: "HTTP GET",
+        x: 440,
+        y: 220,
+        config: {
+          url: "https://httpbin.org/get",
+          method: "GET",
+        },
+      },
+      {
+        id: "node_transform",
+        name: "Remap JSON Payload",
+        type: "transform_script",
+        category: "action",
+        status: "idle",
+        detail: "Safe path remap {{items}}",
+        badge: "TRANSFORM",
+        x: 780,
+        y: 220,
+        config: {
+          script: "payload.items.map(i => i.id)",
+        },
+      },
+    ],
+    connections: [
+      { from: "node_cron_trigger", to: "node_http_fetch" },
+      { from: "node_http_fetch", to: "node_transform" },
+    ],
+  },
 ];
 
 export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes] = useState<WorkflowNode[]>(INITIAL_NODES);
-  const [connections, setConnections] = useState<Connection[]>(INITIAL_CONNECTIONS);
+  const [activeTemplateId, setActiveTemplateId] = useState<string>("diamond");
+  const [nodes, setNodes] = useState<WorkflowNode[]>(PRESEEDED_DEMO_TEMPLATES[0].nodes);
+  const [connections, setConnections] = useState<Connection[]>(PRESEEDED_DEMO_TEMPLATES[0].connections);
   const [isRunning, setIsRunning] = useState(false);
   const [activeEdgeIndex, setActiveEdgeIndex] = useState<number>(-1);
 
@@ -251,6 +358,19 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     setTimeout(() => {
       setToastMessage(null);
     }, 2800);
+  };
+
+  // Load a pre-seeded ready-to-run demo template (T6.1)
+  const loadTemplate = (templateId: string) => {
+    const tmpl = PRESEEDED_DEMO_TEMPLATES.find((t) => t.id === templateId);
+    if (!tmpl) return;
+    setActiveTemplateId(templateId);
+    setNodes(tmpl.nodes.map((n) => ({ ...n, status: "idle" })));
+    setConnections(tmpl.connections);
+    setSelectedNodeId(null);
+    setIsRunning(false);
+    setActiveEdgeIndex(-1);
+    showToast(`Loaded "${tmpl.name}"`);
   };
 
   // Add Card to Canvas from Desk via click
@@ -495,18 +615,27 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     let runId: string | null = null;
     try {
       const webhookNode = nodes.find((n) => n.type === "webhook_trigger");
-      const endpoint = webhookNode?.config?.url || "/api/v1/hooks/orders_settle";
+      const cronNode = nodes.find((n) => n.type === "cron_trigger");
+      const endpoint = webhookNode?.config?.url || (cronNode ? "/api/v1/cron/trigger-now" : "/api/v1/hooks/orders_settle");
+      const secret = endpoint.includes("chaos_flaky")
+        ? "chronograph_chaos_secret_2026"
+        : endpoint.includes("cron")
+        ? "chronograph_cron_sync_secret_2026"
+        : "chronograph_webhook_secret_2026";
+      const payload = cronNode && !webhookNode
+        ? { workflowId: "cron_data_sync" }
+        : {
+            source: "chronograph_studio",
+            timestamp: new Date().toISOString(),
+            nodesCount: nodes.length,
+          };
       const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-webhook-secret": "chronograph_webhook_secret_2026",
+          "x-webhook-secret": secret,
         },
-        body: JSON.stringify({
-          source: "chronograph_studio",
-          timestamp: new Date().toISOString(),
-          nodesCount: nodes.length,
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const data = await res.json();
@@ -969,6 +1098,29 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           <span>{isRunning ? "Executing..." : "Execute"}</span>
           <span className="hidden sm:inline">{isRunning ? "" : " Workflow"}</span>
         </button>
+
+        <div className={`h-4 w-px mx-0.5 ${isLight ? "bg-[#E2E6E3]" : "bg-[#243026]"}`} />
+
+        {/* Demo Templates Switcher (T6.1) */}
+        <div className="flex items-center gap-1">
+          {PRESEEDED_DEMO_TEMPLATES.map((tmpl) => (
+            <button
+              key={tmpl.id}
+              onClick={() => loadTemplate(tmpl.id)}
+              type="button"
+              className={`px-2 sm:px-2.5 py-1 text-[11px] font-mono rounded-lg border transition-all cursor-pointer ${
+                activeTemplateId === tmpl.id
+                  ? "border-[#7FBF6A] bg-[#7FBF6A]/15 text-[#7FBF6A] font-semibold"
+                  : isLight
+                  ? "border-transparent text-[#667268] hover:text-[#111814] hover:bg-[#F0F2F0]"
+                  : "border-transparent text-[#8B968B] hover:text-[#E8ECE4] hover:bg-[#1A221C]"
+              }`}
+              title={tmpl.description}
+            >
+              <span>{tmpl.shortLabel}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Bottom Right: Zoom & Center Controls ── */}

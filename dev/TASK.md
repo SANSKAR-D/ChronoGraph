@@ -50,7 +50,7 @@
 ---
 
 ## Phase 6: Benchmarks, Chaos Demo & Viva Defense Prep (Hours 30–36)
-- [ ] **T6.1 (Pre-Seeded Demo Workflows):** Seed 3 ready-to-run templates on startup so judges don't start with an empty canvas[cite: 16]:
+- [x] **T6.1 (Pre-Seeded Demo Workflows):** Seed 3 ready-to-run templates on startup so judges don't start with an empty canvas[cite: 16]:
   1. *Diamond Payment Settlement DAG* (Demonstrates parallel fan-out & atomic fan-in)[cite: 18].
   2. *Chaos Flaky API Pipeline* (Demonstrates Exponential Backoff + Jitter & DLQ Replay)[cite: 8, 18].
   3. *Cron Data Sync Pipeline* (Demonstrates scheduled triggers & JSON transformation)[cite: 8].

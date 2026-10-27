@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "worker": "tsx src/workers/dag-worker.ts",
+    "seed": "tsx scripts/seed-workflows.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
