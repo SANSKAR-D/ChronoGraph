@@ -6,6 +6,7 @@
     "dev": "next dev",
     "worker": "tsx src/workers/dag-worker.ts",
     "seed": "tsx scripts/seed-workflows.ts",
+    "benchmark": "tsx scripts/benchmark-load.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
