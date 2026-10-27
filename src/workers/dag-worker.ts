@@ -642,6 +642,10 @@ export async function stopDagWorker(): Promise<void> {
 // Standalone execution entrypoint when run via CLI: tsx src/workers/dag-worker.ts
 if (require.main === module || process.env.RUN_STANDALONE_WORKER === "true") {
   console.log("⚡ Starting ChronoGraph Distributed DAG Worker Process...");
+  // Auto-seed demo blueprints on worker startup
+  import("../../scripts/seed-workflows")
+    .then(({ seedAllWorkflows }) => seedAllWorkflows({ silent: true }))
+    .catch(() => {});
   const worker = startDagWorker();
 
   const shutdown = async (signal: string) => {
