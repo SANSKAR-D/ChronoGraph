@@ -38,7 +38,18 @@ enum TriggerSource {
   @@map("trigger_source")
 }
 
+model User {
+  id        String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String              @unique @db.VarChar(255)
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  workflows WorkflowBlueprint[]
+
+  @@map("users")
+}
+
 model WorkflowBlueprint {
+  userId         String?        @map("user_id") @db.Uuid
+  userEmail      String?        @map("user_email") @db.VarChar(255)
   id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name           String         @db.VarChar(255)
   description    String?        @db.Text
@@ -52,6 +63,7 @@ model WorkflowBlueprint {
   version        Int            @default(1)
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user           User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   runs           WorkflowRun[]
 
   @@map("workflow_blueprints")
@@ -60,6 +72,7 @@ model WorkflowBlueprint {
 model WorkflowRun {
   id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workflowId     String               @map("workflow_id") @db.Uuid
+  userEmail      String?              @map("user_email") @db.VarChar(255)
   status         RunStatus            @default(PENDING)
   triggerType    TriggerSource        @map("trigger_type")
   triggerPayload Json                 @default("{}") @map("trigger_payload")
@@ -96,6 +109,7 @@ model DeadLetterJob {
   id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   runId         String      @map("run_id") @db.Uuid
   workflowId    String      @map("workflow_id") @db.Uuid
+  userEmail     String?     @map("user_email") @db.VarChar(255)
   nodeId        String      @map("node_id") @db.VarChar(128)
   failedPayload Json        @map("failed_payload")
   lastError     String      @map("last_error") @db.Text

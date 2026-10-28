@@ -11,6 +11,7 @@ export interface DAGJobData {
   runId: string;
   workflowId: string;
   nodeId: string;
+  nodeName?: string;
   nodeType?: string;
   nodeData?: Record<string, unknown>;
   attempt?: number;
@@ -133,6 +134,7 @@ export async function routeJobToDeadLetterQueue(
         runId,
         workflowId,
         nodeId,
+        userEmail: (data as any)?.userEmail || null,
         failedPayload: {
           jobId: job.id,
           jobName: (job as any).name,
@@ -354,6 +356,8 @@ export async function handleWorkerJobFailure(
         event: "NODE_STATE_CHANGE",
         runId,
         nodeId,
+        nodeName: (data as any)?.nodeName || (data?.nodeData as any)?.name || nodeId,
+        nodeType: (data as any)?.nodeType,
         status: "RETRYING",
         attempt: attemptsMade,
         maxAttempts,

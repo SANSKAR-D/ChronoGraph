@@ -34,6 +34,7 @@ interface DLQJob {
 export function DLQView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const isLight = theme === "light";
   const [jobs, setJobs] = useState<DLQJob[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ email: string } | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
@@ -54,6 +55,10 @@ export function DLQView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   }, []);
 
   useEffect(() => {
+    fetch("/api/v1/auth/me")
+      .then((r) => r.json())
+      .then((d) => d?.user && setCurrentUser(d.user))
+      .catch(() => {});
     fetchJobs();
     const timer = setInterval(fetchJobs, 3500);
     return () => clearInterval(timer);
@@ -215,6 +220,11 @@ export function DLQView({ theme = "dark" }: { theme?: "dark" | "light" }) {
             <span className="rounded-full bg-[#E5735C]/15 px-2.5 py-0.5 text-xs font-mono font-bold text-[#E5735C] border border-[#E5735C]/30 shadow-[0_0_12px_rgba(229,115,92,0.2)]">
               {jobs.filter((j) => j.status === "pending").length} Unresolved
             </span>
+            {currentUser && (
+              <span className="rounded-full bg-[#7FBF6A]/15 px-2.5 py-0.5 text-xs font-mono font-medium text-[#7FBF6A] border border-[#7FBF6A]/30">
+                {currentUser.email}
+              </span>
+            )}
           </div>
           <p
             className={`text-xs font-medium mt-0.5 ${

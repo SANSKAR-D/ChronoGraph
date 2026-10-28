@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { TabList, Tab, TabSelectionIndicator } from "@/components/ui/swipeable-tabs";
-import { LogIn } from "lucide-react";
+import { LogIn, LogOut } from "lucide-react";
 import { ChronoGraphIcon } from "@/components/ui/logo";
 
 interface NavbarProps {
@@ -12,6 +12,7 @@ interface NavbarProps {
   theme?: "dark" | "light";
   onToggleTheme?: () => void;
   hasDlqAlert?: boolean;
+  currentUser?: { email: string } | null;
 }
 
 export function Navbar({
@@ -20,9 +21,49 @@ export function Navbar({
   theme = "dark",
   onToggleTheme,
   hasDlqAlert: propHasDlqAlert,
+  currentUser: propCurrentUser,
 }: NavbarProps) {
   const isLight = theme === "light";
   const [hasDlqAlert, setHasDlqAlert] = useState<boolean>(Boolean(propHasDlqAlert));
+  const [currentUser, setCurrentUser] = useState<{ email: string } | null>(propCurrentUser || null);
+
+  useEffect(() => {
+    if (propCurrentUser !== undefined) {
+      setCurrentUser(propCurrentUser);
+    }
+  }, [propCurrentUser]);
+
+  useEffect(() => {
+    if (propCurrentUser !== undefined) return;
+    let mounted = true;
+    fetch("/api/v1/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (mounted && data?.success && data?.user) {
+          setCurrentUser(data.user);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [propCurrentUser]);
+
+  const handleProtectedTabClick = (e: React.MouseEvent | React.TouchEvent, _tabId: string) => {
+    if (!currentUser) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.location.href = "/login";
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/v1/auth/logout", { method: "POST" });
+    } catch {}
+    setCurrentUser(null);
+    window.location.reload();
+  };
 
   useEffect(() => {
     if (propHasDlqAlert !== undefined) {
@@ -108,14 +149,26 @@ export function Navbar({
               <Tab id="home">
                 <span>Home</span>
               </Tab>
-              <Tab id="studio">
+              <Tab
+                id="studio"
+                onClick={(e) => handleProtectedTabClick(e, "studio")}
+                onTouchStart={(e) => handleProtectedTabClick(e, "studio")}
+              >
                 <span>Studio</span>
               </Tab>
-              <Tab id="telemetry">
+              <Tab
+                id="telemetry"
+                onClick={(e) => handleProtectedTabClick(e, "telemetry")}
+                onTouchStart={(e) => handleProtectedTabClick(e, "telemetry")}
+              >
                 <span className="hidden sm:inline">Telemetry</span>
                 <span className="sm:hidden">Telem</span>
               </Tab>
-              <Tab id="dlq">
+              <Tab
+                id="dlq"
+                onClick={(e) => handleProtectedTabClick(e, "dlq")}
+                onTouchStart={(e) => handleProtectedTabClick(e, "dlq")}
+              >
                 <span>DLQ</span>
                 {/* alert dot in muted terracotta red #E5735C - visible only when DLQ is not empty */}
                 {hasDlqAlert && (
@@ -148,14 +201,43 @@ export function Navbar({
             </button>
           )}
 
-          <button
-            onClick={onLogin}
-            type="button"
-            className="flex items-center gap-1.5 rounded-full px-2.5 sm:px-4 py-1 sm:py-1.5 text-xs font-semibold text-[#0C100D] bg-[#7FBF6A] hover:bg-[#92CF7D] active:scale-[0.98] transition-all cursor-pointer border border-[#7FBF6A]"
-          >
-            <LogIn className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Login</span>
-          </button>
+          {currentUser ? (
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <div
+                className={`flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full border font-mono font-bold text-xs uppercase shadow-sm select-none shrink-0 ${
+                  isLight
+                    ? "border-[#7FBF6A] bg-[#7FBF6A]/20 text-[#245917]"
+                    : "border-[#7FBF6A]/60 bg-[#7FBF6A]/20 text-[#7FBF6A] shadow-[0_0_10px_rgba(127,191,106,0.25)]"
+                }`}
+                title={currentUser.email}
+                aria-label={`Logged in as ${currentUser.email}`}
+              >
+                {currentUser.email?.charAt(0).toUpperCase() || "U"}
+              </div>
+              <button
+                onClick={handleLogout}
+                type="button"
+                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border transition-all cursor-pointer ${
+                  isLight
+                    ? "border-[#D1D9D0] bg-[#FAFBF9] text-[#5E695E] hover:text-[#141A15]"
+                    : "border-[#243026] bg-[#141A15] text-[#8B968B] hover:text-[#E8ECE4]"
+                }`}
+                title="Logout"
+              >
+                <LogOut className="h-3 w-3" />
+                <span className="hidden md:inline">Logout</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onLogin || (() => (window.location.href = "/login"))}
+              type="button"
+              className="flex items-center gap-1.5 rounded-full px-2.5 sm:px-4 py-1 sm:py-1.5 text-xs font-semibold text-[#0C100D] bg-[#7FBF6A] hover:bg-[#92CF7D] active:scale-[0.98] transition-all cursor-pointer border border-[#7FBF6A]"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Login</span>
+            </button>
+          )}
         </div>
       </div>
     </motion.header>

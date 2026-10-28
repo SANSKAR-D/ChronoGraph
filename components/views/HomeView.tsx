@@ -476,11 +476,13 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
           {/* 3D Canvas with hardware compositor scaling */}
           <canvas
             ref={canvasRef}
-            className="relative z-0 h-full w-full object-contain will-change-transform"
+            className="relative z-0 h-full w-full object-cover sm:object-contain will-change-transform scale-[1.35] sm:scale-100 transition-transform duration-300"
           />
 
           {/* Floating luminous particle layer — sits at z-10 below cards & hero */}
-          <ParticleCanvas count={65} />
+          <div className="hidden md:block">
+            <ParticleCanvas count={65} />
+          </div>
 
           {/* ── Hero overlay ── positioned below 3D object at z-20 (Direct GPU transforms) */}
           <div
@@ -850,7 +852,7 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
       </section>
 
       {/* ── Feature Cards Section: Skiper34 StickyCard_003 ── */}
-      <section className="relative z-20 flex w-full flex-col items-center gap-[10vh] bg-[#0C100D] border-t border-[#243026] px-4 sm:px-6 lg:px-8 pt-[35vh] pb-[40vh]">
+      <section className="relative z-20 flex w-full flex-col items-center gap-[8vh] sm:gap-[10vh] bg-[#0C100D] border-t border-[#243026] px-3 sm:px-6 lg:px-8 pt-[20vh] sm:pt-[35vh] pb-[25vh] sm:pb-[40vh]">
         {/* Subtle background ambient lighting */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-[#7FBF6A]/5 rounded-full blur-[160px]" />

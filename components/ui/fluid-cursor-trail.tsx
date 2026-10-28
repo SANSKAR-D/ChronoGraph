@@ -19,6 +19,7 @@ export function FluidCursorTrail() {
 
   useEffect(() => {
     setIsClient(true);
+    if (typeof window !== "undefined" && (window.innerWidth < 768 || window.matchMedia("(pointer: coarse)").matches)) return;
     const container = containerRef.current;
     const inner = innerRef.current;
     const orb = orbRef.current;

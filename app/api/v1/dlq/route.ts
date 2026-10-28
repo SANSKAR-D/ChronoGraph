@@ -1,28 +1,56 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth/session";
 
 /**
  * GET /api/v1/dlq
  * Returns the list of dead-letter jobs with rich context (target URLs, error categories, payloads).
  */
-export async function GET() {
+export async function GET(req?: NextRequest) {
   try {
-    const records = await db.deadLetterJob.findMany({
-      orderBy: { failedAt: "desc" },
-      take: 100,
-      include: {
-        run: {
-          select: {
-            workflow: {
-              select: {
-                name: true,
-                nodesJson: true,
-              },
+    const session = getSessionUser(req);
+    const userEmail = session?.email;
+
+    let records: any[] = [];
+    const includeConfig = {
+      run: {
+        select: {
+          workflow: {
+            select: {
+              name: true,
+              nodesJson: true,
             },
           },
         },
       },
-    });
+    };
+
+    try {
+      records = await db.deadLetterJob.findMany({
+        where: userEmail
+          ? { OR: [{ userEmail }, { run: { workflow: { userEmail } } }, { userEmail: null }] }
+          : undefined,
+        orderBy: { failedAt: "desc" },
+        take: 100,
+        include: includeConfig,
+      });
+    } catch {
+      // Safe fallback if Prisma client schema lacks userEmail parameter
+      records = await db.deadLetterJob.findMany({
+        orderBy: { failedAt: "desc" },
+        take: 100,
+        include: includeConfig,
+      });
+      if (userEmail) {
+        records = records.filter(
+          (r: any) =>
+            !r.userEmail ||
+            r.userEmail === userEmail ||
+            !r.run?.workflow?.userEmail ||
+            r.run?.workflow?.userEmail === userEmail
+        );
+      }
+    }
 
     const jobs = records.map((record) => {
       const payload = record.failedPayload as Record<string, any> | null;

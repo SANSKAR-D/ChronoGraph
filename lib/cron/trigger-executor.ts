@@ -145,6 +145,7 @@ export async function executeCronWorkflowTrigger(
           runId,
           workflowId: blueprint.id,
           nodeId,
+          nodeName: (nodeDef as any)?.name || nodeId,
           nodeType: nodeDef?.type || "CRON_TRIGGER",
           nodeData: nodeDef?.data || {},
           attempt: 1,

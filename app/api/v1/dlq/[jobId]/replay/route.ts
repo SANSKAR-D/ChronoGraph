@@ -115,6 +115,7 @@ export async function POST(
         runId: dlqJob.runId,
         workflowId: dlqJob.workflowId,
         nodeId: dlqJob.nodeId,
+        nodeName: (nodeDef as any)?.name || dlqJob.nodeId,
         nodeType: nodeDef?.type || "HTTP_REQUEST",
         nodeData: nodeDef?.data || {},
         attempt: nextAttempt,

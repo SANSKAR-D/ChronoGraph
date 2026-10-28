@@ -32,6 +32,42 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chronograph-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgrespassword@postgres:5432/chronograph?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      NODE_ENV: "production"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chronograph-worker
+    restart: unless-stopped
+    command: npm run worker:autoscale
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgrespassword@postgres:5432/chronograph?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      NODE_ENV: "production"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Activity, Server, RefreshCw, Radio } from "lucide-react";
 import { CronSchedulersPanel } from "@/components/telemetry/CronSchedulersPanel";
+import { getSocket } from "@/lib/socket/client";
 
 interface WorkerNode {
   id: string;
@@ -15,10 +16,27 @@ interface WorkerNode {
   lastHeartbeat: string;
 }
 
+export function formatTelemetryEventName(parsed: any): string {
+  if (!parsed) return "EVENT";
+  const rawNodeName = parsed.nodeName || parsed.name || parsed.nodeData?.name || parsed.nodeData?.label;
+  const rawNodeId = parsed.nodeId || parsed.id;
+  const nodeLabel = rawNodeName
+    ? (rawNodeId && rawNodeName !== rawNodeId
+        ? `${rawNodeName} (${rawNodeId})`
+        : rawNodeName)
+    : rawNodeId;
+
+  if (parsed.event === "NODE_STATE_CHANGE") {
+    return nodeLabel || "Node Execution";
+  }
+  return parsed.event || (nodeLabel ? `EXEC:${nodeLabel}` : "EVENT");
+}
+
 export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const isLight = theme === "light";
   const [streamActive, setStreamActive] = useState(true);
   const [events, setEvents] = useState<Array<{ id: string; time: string; event: string; status: string; latency: number }>>([]);
+  const seenEventsRef = useRef<Map<string, number>>(new Map());
 
   const [metrics, setMetrics] = useState({
     waiting: 0,
@@ -101,48 +119,92 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
   useEffect(() => {
     if (!streamActive) return;
     let es: EventSource | null = null;
+    let socket: any = null;
+
+    const processParsedEvent = (parsed: any) => {
+      if (!parsed) return;
+      if (parsed.status === "connected" && !parsed.event) return;
+      if (parsed.event === "AUTOSCALER_UPDATE") {
+        setAutoscaler(parsed);
+        return;
+      }
+      // Deduplicate rapid identical events across streams within 1500ms
+      const dedupKey = `${parsed.runId || ""}:${parsed.nodeId || ""}:${parsed.event || ""}:${parsed.status || ""}:${parsed.attempt || ""}:${parsed.timestamp || ""}`;
+      const now = Date.now();
+      const lastSeen = seenEventsRef.current.get(dedupKey);
+      if (lastSeen && now - lastSeen < 1500) {
+        return;
+      }
+      seenEventsRef.current.set(dedupKey, now);
+      if (seenEventsRef.current.size > 200) {
+        for (const [k, t] of seenEventsRef.current) {
+          if (now - t > 10000) seenEventsRef.current.delete(k);
+        }
+      }
+
+      const eventName = formatTelemetryEventName(parsed);
+      const status = parsed.status || (eventName.includes("FAIL") ? "FAILED" : "SUCCESS");
+      const latency = parsed.latency ?? (parsed.durationMs ? Math.round(parsed.durationMs) : 12);
+      const time = parsed.timestamp
+        ? new Date(parsed.timestamp).toLocaleTimeString()
+        : new Date().toLocaleTimeString();
+
+      setEvents((prev) => [
+        {
+          id: parsed.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          time,
+          event: eventName,
+          status,
+          latency,
+        },
+        ...prev.slice(0, 49),
+      ]);
+    };
+
+    const handleEventDataStr = (dataStr: string) => {
+      try {
+        processParsedEvent(JSON.parse(dataStr));
+      } catch {
+        // ignore non-json keepalive
+      }
+    };
+
+    // 1. Primary: Native SSE stream for cluster events
     try {
       es = new EventSource("/api/v1/cluster/events");
-
-      const handleEvent = (dataStr: string) => {
-        try {
-          const parsed = JSON.parse(dataStr);
-          if (parsed.status === "connected" && !parsed.event) return;
-          if (parsed.event === "AUTOSCALER_UPDATE") {
-            setAutoscaler(parsed);
-            return;
-          }
-          const eventName = parsed.event || (parsed.nodeId ? `EXEC:${parsed.nodeId}` : "EVENT");
-          const status = parsed.status || (eventName.includes("FAIL") ? "FAILED" : "SUCCESS");
-          const latency = parsed.latency ?? (parsed.durationMs ? Math.round(parsed.durationMs) : 12);
-          const time = parsed.timestamp
-            ? new Date(parsed.timestamp).toLocaleTimeString()
-            : new Date().toLocaleTimeString();
-
-          setEvents((prev) => [
-            {
-              id: parsed.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              time,
-              event: eventName,
-              status,
-              latency,
-            },
-            ...prev.slice(0, 49),
-          ]);
-        } catch {
-          // ignore non-json keepalive
-        }
-      };
-
-      es.onmessage = (e) => handleEvent(e.data);
-      es.addEventListener("WORKFLOW_TRIGGERED", (e: any) => handleEvent(e.data));
-      es.addEventListener("NODE_STATE_CHANGE", (e: any) => handleEvent(e.data));
-      es.addEventListener("JOB_COMPLETED", (e: any) => handleEvent(e.data));
+      es.onmessage = (e) => handleEventDataStr(e.data);
+      const namedEvents = [
+        "message",
+        "cluster:event",
+        "WORKFLOW_TRIGGERED",
+        "NODE_STATE_CHANGE",
+        "JOB_COMPLETED",
+        "WORKFLOW_COMPLETED",
+        "AUTOSCALER_UPDATE",
+      ];
+      namedEvents.forEach((evt) => {
+        es?.addEventListener(evt, (e: any) => handleEventDataStr(e.data));
+      });
     } catch {
       // EventSource failed to instantiate
     }
 
+    // 2. Secondary / Hybrid: WebSocket (Socket.IO)
+    try {
+      socket = getSocket({ channel: "cluster" });
+      if (socket) {
+        socket.on("cluster:event", processParsedEvent);
+        socket.on("AUTOSCALER_UPDATE", processParsedEvent);
+      }
+    } catch {
+      // socket connection error
+    }
+
     return () => {
+      if (socket) {
+        socket.off("cluster:event", processParsedEvent);
+        socket.off("AUTOSCALER_UPDATE", processParsedEvent);
+      }
       if (es) {
         es.close();
       }

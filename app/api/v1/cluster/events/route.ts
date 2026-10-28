@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
           const parsed = JSON.parse(msg);
           const eventType = parsed.event || "message";
           controller.enqueue(
-            encoder.encode(`event: ${eventType}\ndata: ${msg}\n\n`)
+            encoder.encode(`event: ${eventType}\ndata: ${msg}\n\nevent: message\ndata: ${msg}\n\n`)
           );
         } catch {
           controller.enqueue(encoder.encode(`data: ${msg}\n\n`));

@@ -26,6 +26,7 @@ import {
   Save,
 } from "lucide-react";
 import { validateDAG } from "@/lib/dag/cycle-detector";
+import { getSocket } from "@/lib/socket/client";
 
 export type CoreNodeType =
   | "webhook_trigger"
@@ -320,6 +321,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const [nodes, setNodes] = useState<WorkflowNode[]>(PRESEEDED_DEMO_TEMPLATES[0].nodes);
   const [connections, setConnections] = useState<Connection[]>(PRESEEDED_DEMO_TEMPLATES[0].connections);
   const [isRunning, setIsRunning] = useState(false);
+  const [executingNodeName, setExecutingNodeName] = useState<string | null>(null);
   const [activeEdgeIndex, setActiveEdgeIndex] = useState<number>(-1);
 
   // Selected Node for Node Inspector Drawer (Target URL, Retries, Jitter Backoff)
@@ -414,6 +416,13 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const hasRestoredTemplateRef = useRef(false);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 640) {
+      setPan({ x: 16, y: 70 });
+      setScale(0.52);
+    }
+  }, []);
+
+  useEffect(() => {
     fetchSavedWorkflows();
     const handleWfChange = () => fetchSavedWorkflows();
     window.addEventListener("chronograph:workflows-change", handleWfChange);
@@ -500,6 +509,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
       localStorage.setItem("chronograph_active_template", "new_blank");
     } catch {}
     setIsRunning(false);
+    setExecutingNodeName(null);
     setActiveEdgeIndex(-1);
     setIsDrawerOpen(true);
     showToast("Created new workflow — select cards from the desk below");
@@ -540,6 +550,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     setConnections(loadedConnections);
     setSelectedNodeId(null);
     setIsRunning(false);
+    setExecutingNodeName(null);
     setActiveEdgeIndex(-1);
     showToast(`Loaded "${wf.name}"`);
   };
@@ -558,6 +569,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     setConnections(tmpl.connections);
     setSelectedNodeId(null);
     setIsRunning(false);
+    setExecutingNodeName(null);
     setActiveEdgeIndex(-1);
     showToast(`Loaded "${tmpl.name}"`);
   };
@@ -756,23 +768,42 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     panStart.current = { ...pan };
   };
 
+  const handleCanvasTouchStart = (e: React.TouchEvent) => {
+    if (
+      (e.target as HTMLElement).closest(".studio-node") ||
+      (e.target as HTMLElement).closest(".canvas-control") ||
+      (e.target as HTMLElement).closest(".node-port")
+    ) {
+      return;
+    }
+    const touch = e.touches[0];
+    if (touch) {
+      setIsPanning(true);
+      dragStart.current = { x: touch.clientX, y: touch.clientY };
+      panStart.current = { ...pan };
+    }
+  };
+
   const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
+    (e: MouseEvent | TouchEvent) => {
+      const clientX = "touches" in e ? e.touches[0]?.clientX : (e as MouseEvent).clientX;
+      const clientY = "touches" in e ? e.touches[0]?.clientY : (e as MouseEvent).clientY;
+      if (clientX === undefined || clientY === undefined) return;
       setMouseCanvasPos({
-        x: (e.clientX - pan.x) / scale,
-        y: (e.clientY - pan.y) / scale,
+        x: (clientX - pan.x) / scale,
+        y: (clientY - pan.y) / scale,
       });
 
       if (isPanning) {
-        const dx = e.clientX - dragStart.current.x;
-        const dy = e.clientY - dragStart.current.y;
+        const dx = clientX - dragStart.current.x;
+        const dy = clientY - dragStart.current.y;
         setPan({
           x: panStart.current.x + dx,
           y: panStart.current.y + dy,
         });
       } else if (draggingNodeId) {
-        const dx = (e.clientX - nodeDragStart.current.x) / scale;
-        const dy = (e.clientY - nodeDragStart.current.y) / scale;
+        const dx = (clientX - nodeDragStart.current.x) / scale;
+        const dy = (clientY - nodeDragStart.current.y) / scale;
         setNodes((prev) =>
           prev.map((node) =>
             node.id === draggingNodeId
@@ -808,26 +839,46 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   useEffect(() => {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleMouseMove, { passive: false });
+    window.addEventListener("touchend", handleMouseUp);
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleMouseMove);
+      window.removeEventListener("touchend", handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
 
-  const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
-    if ((e.target as HTMLElement).closest(".node-port") || (e.target as HTMLElement).closest("button")) {
-      return;
-    }
-    e.stopPropagation();
+  const startDragNode = (clientX: number, clientY: number, nodeId: string) => {
     setDraggingNodeId(nodeId);
-    nodeDragStart.current = { x: e.clientX, y: e.clientY };
+    nodeDragStart.current = { x: clientX, y: clientY };
     const n = nodes.find((item) => item.id === nodeId);
     if (n) {
       nodeInitialPos.current = { x: n.x, y: n.y };
     }
   };
 
-  const runWorkflow = async () => {
+  const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
+    if ((e.target as HTMLElement).closest(".node-port") || (e.target as HTMLElement).closest("button")) {
+      return;
+    }
+    e.stopPropagation();
+    startDragNode(e.clientX, e.clientY, nodeId);
+  };
+
+  const handleNodeTouchStart = (e: React.TouchEvent, nodeId: string) => {
+    if ((e.target as HTMLElement).closest(".node-port") || (e.target as HTMLElement).closest("button")) {
+      return;
+    }
+    e.stopPropagation();
+    const touch = e.touches[0];
+    if (touch) {
+      startDragNode(touch.clientX, touch.clientY, nodeId);
+    }
+  };
+
+
+    const runWorkflow = async () => {
     if (isRunning) return;
     setIsRunning(true);
     setNodes((prev) => prev.map((n) => ({ ...n, status: "idle" })));
@@ -837,55 +888,99 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     try {
       const webhookNode = nodes.find((n) => n.type === "webhook_trigger");
       const cronNode = nodes.find((n) => n.type === "cron_trigger");
-      const endpoint = webhookNode?.config?.url || (cronNode ? "/api/v1/cron/trigger-now" : "/api/v1/hooks/orders_settle");
+      const isSaved = savedWorkflows.some((w) => w.id === activeTemplateId);
+      const endpoint = isSaved
+        ? `/api/v1/hooks/${activeTemplateId}`
+        : webhookNode?.config?.url ||
+          (activeTemplateId === "chaos"
+            ? "/api/v1/hooks/chaos_flaky"
+            : activeTemplateId === "cron" || cronNode
+            ? "/api/v1/cron/trigger-now"
+            : "/api/v1/hooks/orders_settle");
+
       const secret = endpoint.includes("chaos_flaky")
         ? "chronograph_chaos_secret_2026"
         : endpoint.includes("cron")
         ? "chronograph_cron_sync_secret_2026"
         : "chronograph_webhook_secret_2026";
-      const payload = cronNode && !webhookNode
-        ? { workflowId: "cron_data_sync" }
-        : {
-            source: "chronograph_studio",
-            timestamp: new Date().toISOString(),
-            nodesCount: nodes.length,
-          };
+
+      const payload =
+        cronNode && !webhookNode
+          ? { workflowId: isSaved ? activeTemplateId : "cron_data_sync" }
+          : {
+              source: "chronograph_studio",
+              workflowId: isSaved ? activeTemplateId : undefined,
+              timestamp: new Date().toISOString(),
+              nodesCount: nodes.length,
+            };
+
       const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-webhook-secret": secret,
+          "x-studio-dispatch": "true",
         },
         body: JSON.stringify(payload),
       });
+
       if (res.ok) {
         const data = await res.json();
         if (data && data.runId) {
           runId = String(data.runId);
-          showToast(`Run dispatched (${String(data.runId).slice(0, 8)}...) • SSE Connected`);
+          showToast(`Run dispatched (${String(data.runId).slice(0, 8)}...) • SSE & Telemetry Live`);
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast(`Dispatch failed: ${errData.error || res.statusText}`);
       }
-    } catch {
-      // Offline fallback mode
+    } catch (err: any) {
+      showToast(`Dispatch error: ${err.message || String(err)}`);
     }
 
-    // 2. If real SSE runId is available, connect EventSource to /api/v1/runs/[runId]/stream
+    // 2. Connect via WebSocket (Socket.IO) with SSE fallback
     let eventSource: EventSource | null = null;
+    let activeSocket: any = null;
     if (runId) {
+      const handleRunPayload = (parsed: any) => {
+        if (!parsed) return;
+        if (parsed.nodeId) {
+          const matched = nodes.find((n) => n.id === parsed.nodeId);
+          if (parsed.status === "RUNNING") {
+            setExecutingNodeName(matched?.name || parsed.nodeId);
+          }
+          setNodes((prev) =>
+            prev.map((n) =>
+              n.id === parsed.nodeId
+                ? {
+                    ...n,
+                    status:
+                      parsed.status === "COMPLETED" || parsed.status === "SUCCESS"
+                        ? "success"
+                        : "running",
+                  }
+                : n
+            )
+          );
+        }
+      };
+
+      try {
+        activeSocket = getSocket({ runId });
+        if (activeSocket) {
+          activeSocket.on("run:event", handleRunPayload);
+          activeSocket.on("NODE_STATE_CHANGE", handleRunPayload);
+          activeSocket.on("WORKFLOW_COMPLETED", handleRunPayload);
+        }
+      } catch {
+        // socket connection fallback
+      }
+
       try {
         eventSource = new EventSource(`/api/v1/runs/${runId}/stream`);
         const handleRunMessage = (e: MessageEvent) => {
           try {
-            const parsed = JSON.parse(e.data);
-            if (parsed.nodeId) {
-              setNodes((prev) =>
-                prev.map((n) =>
-                  n.id === parsed.nodeId
-                    ? { ...n, status: parsed.status === "COMPLETED" || parsed.status === "SUCCESS" ? "success" : "running" }
-                    : n
-                )
-              );
-            }
+            handleRunPayload(JSON.parse(e.data));
           } catch {}
         };
         eventSource.onmessage = handleRunMessage;
@@ -904,8 +999,12 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         : nodes.map((n) => n.id);
 
     topoOrder.forEach((nodeId, idx) => {
+      const nodeObj = nodes.find((n) => n.id === nodeId);
+      const nodeName = nodeObj?.name || nodeId;
+
       setTimeout(() => {
         setActiveEdgeIndex(idx);
+        setExecutingNodeName(nodeName);
         setNodes((prev) =>
           prev.map((n) => (n.id === nodeId ? { ...n, status: "running" } : n))
         );
@@ -920,20 +1019,26 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
 
     setTimeout(() => {
       setIsRunning(false);
+      setExecutingNodeName(null);
       setActiveEdgeIndex(-1);
       eventSource?.close();
+      if (activeSocket && runId) {
+        activeSocket.emit("unsubscribe:run", runId);
+      }
     }, topoOrder.length * 750 + 800);
   };
 
   const resetWorkflow = () => {
     setIsRunning(false);
+    setExecutingNodeName(null);
     setActiveEdgeIndex(-1);
     setNodes((prev) => prev.map((n) => ({ ...n, status: "idle" })));
   };
 
   const resetCanvasView = () => {
-    setPan({ x: 30, y: 40 });
-    setScale(0.95);
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+    setPan(isMobile ? { x: 16, y: 70 } : { x: 30, y: 40 });
+    setScale(isMobile ? 0.52 : 0.95);
   };
 
   const getNodeIcon = (type: CoreNodeType) => {
@@ -958,10 +1063,11 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   return (
     <div
       ref={canvasRef}
-      className={`relative w-full h-full overflow-hidden select-none transition-colors duration-300 ${
+      className={`relative w-full h-full overflow-hidden select-none transition-colors duration-300 touch-none ${
         isLight ? "bg-[#F7F8F7]" : "bg-[#0C100D]"
       } ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
       onMouseDown={handleCanvasMouseDown}
+      onTouchStart={handleCanvasTouchStart}
       onDragOver={handleCanvasDragOver}
       onDrop={handleCanvasDrop}
       style={{
@@ -1137,7 +1243,8 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
             <div
               key={node.id}
               onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-              className={`studio-node absolute w-[240px] rounded-2xl border p-3 pointer-events-auto select-none ${
+              onTouchStart={(e) => handleNodeTouchStart(e, node.id)}
+              className={`studio-node absolute w-[240px] rounded-2xl border p-3 pointer-events-auto select-none touch-none ${
                 isDragging
                   ? "cursor-grabbing transition-none"
                   : "cursor-grab transition-colors duration-150"
@@ -1288,7 +1395,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
 
       {/* ── Top Left: Execute & Reset Workflow Toolbar ── */}
       <div
-        className={`canvas-control pointer-events-auto absolute top-18 sm:top-24 left-3 sm:left-6 z-40 flex flex-wrap items-center gap-1.5 sm:gap-2 rounded-xl border p-1 sm:p-1.5 backdrop-blur-md ${
+        className={`canvas-control pointer-events-auto absolute top-16 sm:top-24 left-2 sm:left-6 z-40 max-w-[calc(100vw-1rem)] flex items-center gap-1 sm:gap-2 rounded-xl border p-1 sm:p-1.5 backdrop-blur-md overflow-x-auto no-scrollbar shrink-0 ${
           isLight
             ? "border-[#E2E6E3] bg-[#FAFAF9]/95 shadow-[0_10px_30px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,1)]"
             : "border-[#243026] bg-[#141A15]/90 shadow-2xl"
@@ -1297,7 +1404,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         <button
           onClick={handleNewWorkflow}
           type="button"
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 sm:px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 ${
+          className={`flex items-center gap-1 sm:gap-1.5 rounded-lg border px-2 sm:px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 shrink-0 ${
             isLight
               ? "border-[#E2E6E3] bg-[#F0F2F0] text-[#667268] hover:text-[#111814] hover:border-[#7FBF6A]/50"
               : "border-[#243026] bg-[#0C100D] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40"
@@ -1311,7 +1418,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         <button
           onClick={() => setShowSaveModal(true)}
           type="button"
-          className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A]/50 bg-[#7FBF6A]/15 hover:bg-[#7FBF6A]/25 text-[#7FBF6A] px-2.5 sm:px-3 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95"
+          className="flex items-center gap-1 sm:gap-1.5 rounded-lg border border-[#7FBF6A]/50 bg-[#7FBF6A]/15 hover:bg-[#7FBF6A]/25 text-[#7FBF6A] px-2 sm:px-3 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95 shrink-0"
           title="Save Workflow Blueprint with Name"
         >
           <Save className="h-3.5 w-3.5" />
@@ -1329,7 +1436,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
             setShowDeleteModal(true);
           }}
           type="button"
-          className="flex items-center gap-1.5 rounded-lg border border-[#E5735C]/40 bg-[#E5735C]/10 hover:bg-[#E5735C]/20 text-[#E5735C] px-2.5 sm:px-3 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95"
+          className="flex items-center gap-1 sm:gap-1.5 rounded-lg border border-[#E5735C]/40 bg-[#E5735C]/10 hover:bg-[#E5735C]/20 text-[#E5735C] px-2 sm:px-3 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95 shrink-0"
           title="Delete a workflow from database"
         >
           <Trash2 className="h-3.5 w-3.5 text-[#E5735C]" />
@@ -1341,7 +1448,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         <button
           onClick={resetWorkflow}
           type="button"
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 sm:px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 ${
+          className={`flex items-center gap-1 sm:gap-1.5 rounded-lg border px-2 sm:px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 shrink-0 ${
             isLight
               ? "border-[#E2E6E3] bg-[#F0F2F0] text-[#667268] hover:text-[#111814] hover:border-[#7FBF6A]/50"
               : "border-[#243026] bg-[#0C100D] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40"
@@ -1356,12 +1463,18 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           onClick={runWorkflow}
           disabled={isRunning || !dagValidation.isValid || nodes.length === 0}
           type="button"
-          className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] text-[#0C100D] shadow-[0_0_15px_rgba(127,191,106,0.3)] px-3 sm:px-4 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-1 sm:gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] text-[#0C100D] shadow-[0_0_15px_rgba(127,191,106,0.3)] px-2.5 sm:px-4 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           title="Simulate DAG Execution"
         >
           <Play className={`h-3.5 w-3.5 fill-current ${isRunning ? "animate-pulse" : ""}`} />
-          <span>{isRunning ? "Executing..." : "Execute"}</span>
-          <span className="hidden sm:inline">{isRunning ? "" : " Workflow"}</span>
+          <span>
+            {isRunning
+              ? executingNodeName
+                ? `Running: ${executingNodeName}`
+                : "Running..."
+              : "Execute"}
+          </span>
+          <span className="hidden md:inline">{isRunning ? "" : " Workflow"}</span>
         </button>
 
         <div className={`h-4 w-px mx-0.5 ${isLight ? "bg-[#E2E6E3]" : "bg-[#243026]"}`} />
@@ -1379,7 +1492,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
               if (saved) loadSavedWorkflow(saved);
             }
           }}
-          className={`rounded-lg border px-2 py-1 text-[11px] font-mono cursor-pointer transition-colors focus:outline-none focus:border-[#7FBF6A] ${
+          className={`rounded-lg border px-1.5 sm:px-2 py-1 text-[10px] sm:text-[11px] font-mono cursor-pointer transition-colors focus:outline-none focus:border-[#7FBF6A] max-w-[110px] sm:max-w-[180px] truncate shrink-0 ${
             isLight
               ? "border-[#E2E6E3] bg-[#FAFBF9] text-[#111814]"
               : "border-[#243026] bg-[#0C100D] text-[#E8ECE4]"
@@ -1592,7 +1705,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           </div>
 
           {/* 5 Core Cards with HTML5 Drag & Drop */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3">
             {CORE_NODE_TEMPLATES.map((tmpl) => (
               <div
                 key={tmpl.type}
@@ -1603,7 +1716,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
                   e.dataTransfer.effectAllowed = "copy";
                 }}
                 onClick={() => addNodeToCanvas(tmpl)}
-                className={`group relative flex flex-col justify-between rounded-2xl border p-3.5 transition-all duration-150 cursor-grab active:cursor-grabbing active:scale-95 ${
+                className={`group relative flex flex-col justify-between rounded-xl sm:rounded-2xl border p-2 sm:p-3.5 transition-all duration-150 cursor-grab active:cursor-grabbing active:scale-95 ${
                   isLight
                     ? "border-[#E2E6E3] bg-[#FAFBF9] hover:border-[#7FBF6A] hover:bg-[#F3F6F2] shadow-sm hover:shadow-md"
                     : "border-[#243026] bg-[#141A15]/95 hover:border-[#7FBF6A] hover:bg-[#1A221C] shadow-lg hover:shadow-[0_8px_25px_rgba(0,0,0,0.6)]"
@@ -1665,7 +1778,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
       {/* ── Right: Node Configuration Inspector Drawer ── */}
       {selectedNode && (
         <div
-          className={`canvas-control pointer-events-auto fixed top-18 sm:top-20 right-3 sm:right-6 z-50 w-[calc(100vw-1.5rem)] sm:w-[420px] max-w-[420px] max-h-[calc(100vh-90px)] sm:max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl sm:rounded-3xl border p-4 sm:p-5 shadow-2xl backdrop-blur-2xl ring-1 ring-[#7FBF6A]/30 animate-in fade-in slide-in-from-right-4 duration-150 ${
+          className={`canvas-control pointer-events-auto fixed top-16 sm:top-20 right-2 sm:right-6 z-50 w-[calc(100vw-1rem)] sm:w-[420px] max-w-[420px] max-h-[calc(100vh-80px)] sm:max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl sm:rounded-3xl border p-3.5 sm:p-5 shadow-2xl backdrop-blur-2xl ring-1 ring-[#7FBF6A]/30 animate-in fade-in slide-in-from-right-4 duration-150 ${
             isLight
               ? "border-[#E2E6E3] bg-[#FAFBF9] text-[#111814] shadow-[0_20px_50px_rgba(0,0,0,0.15)]"
               : "border-[#243026] bg-[#141A15]/98 text-[#E8ECE4] shadow-[0_25px_60px_rgba(0,0,0,0.9)]"

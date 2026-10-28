@@ -119,6 +119,8 @@ describe("T3.1: DAG BullMQ Worker & Heartbeat Runner", () => {
       expect.stringContaining(customWorkerId)
     );
 
+
+
     await worker.close();
   });
 
@@ -198,6 +200,11 @@ describe("T3.1: DAG BullMQ Worker & Heartbeat Runner", () => {
     );
 
     // Verify child node enqueued into queue
+    expect(mockRedis.publish).toHaveBeenCalledWith(
+      "channel:cluster:events",
+      expect.stringContaining('"nodeName":"node_1"')
+    );
+
     expect(mockQueue.add).toHaveBeenCalledWith(
       "exec:child_node_2",
       expect.objectContaining({
@@ -206,6 +213,8 @@ describe("T3.1: DAG BullMQ Worker & Heartbeat Runner", () => {
       }),
       expect.any(Object)
     );
+
+
 
     await worker.close();
   });

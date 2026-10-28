@@ -188,6 +188,12 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
         triggerPayload,
       } = job.data;
 
+      const nodeName =
+        (job.data as any)?.nodeName ||
+        (nodeData as any)?.name ||
+        (nodeData as any)?.label ||
+        nodeId;
+
       const attemptNumber = job.attemptsMade + 1;
       const idempotencyKey =
         job.data.idempotencyKey ||
@@ -213,6 +219,8 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
 
         // 2. Emit RUNNING telemetry to Redis Pub/Sub
         const runningEvent = {
+          nodeName,
+          nodeType,
           event: "NODE_STATE_CHANGE",
           runId,
           workflowId,
@@ -318,6 +326,8 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
             );
 
             const delayedEvent = {
+              nodeName,
+              nodeType,
               event: "NODE_STATE_CHANGE",
               runId,
               workflowId,
@@ -394,6 +404,8 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
 
         // 9. Emit SUCCESS telemetry event to Redis Pub/Sub
         const successEvent = {
+          nodeName,
+          nodeType,
           event: "NODE_STATE_CHANGE",
           runId,
           workflowId,
@@ -476,6 +488,7 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
                 runId,
                 workflowId,
                 nodeId: childId,
+                nodeName: childNodeDef?.name || childId,
                 nodeType: childNodeDef?.type || "ACTION",
                 nodeData: childData,
                 attempt: 1,
@@ -494,6 +507,8 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
 
             // Emit QUEUED event
             const queuedEvent = {
+              nodeName: childNodeDef?.name || childId,
+              nodeType: childNodeDef?.type || "ACTION",
               event: "NODE_STATE_CHANGE",
               runId,
               workflowId,

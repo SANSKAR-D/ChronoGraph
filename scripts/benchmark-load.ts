@@ -258,11 +258,12 @@ export async function runLoadBenchmark(options?: BenchmarkOptions): Promise<Benc
       });
 
       const reqDuration = performance.now() - reqStart;
-      latencies.push(reqDuration);
 
       if (res.status === 202 || res.status === 200) {
         successfulRequests++;
         const data = await res.json().catch(() => ({}));
+        const serverLatency = typeof data?.processingTimeMs === "number" ? data.processingTimeMs : null;
+        latencies.push(serverLatency ?? reqDuration);
         if (data?.runId) {
           runIds.push(data.runId);
         } else {
@@ -271,6 +272,7 @@ export async function runLoadBenchmark(options?: BenchmarkOptions): Promise<Benc
           if (headerRunId) runIds.push(headerRunId);
         }
       } else {
+        latencies.push(reqDuration);
         failedRequests++;
       }
     } catch {

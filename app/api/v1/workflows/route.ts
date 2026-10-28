@@ -2,28 +2,46 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { validateDAG } from "@/lib/dag/cycle-detector";
 import { removeWorkflowCron } from "@/lib/cron/scheduler";
+import { getSessionUser } from "@/lib/auth/session";
 import crypto from "crypto";
 
 /**
  * GET /api/v1/workflows
  * Returns all saved workflow blueprints from the database.
  */
-export async function GET() {
+export async function GET(req?: NextRequest) {
   try {
-    const workflows = await db.workflowBlueprint.findMany({
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        isActive: true,
-        cronExpression: true,
-        nodesJson: true,
-        edgesJson: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const session = getSessionUser(req);
+    const userEmail = session?.email;
+
+    const selectFields = {
+      id: true,
+      name: true,
+      description: true,
+      isActive: true,
+      cronExpression: true,
+      nodesJson: true,
+      edgesJson: true,
+      createdAt: true,
+      updatedAt: true,
+    };
+
+    let workflows: any[] = [];
+    try {
+      workflows = await db.workflowBlueprint.findMany({
+        where: userEmail ? { OR: [{ userEmail }, { userEmail: null }] } : undefined,
+        orderBy: { updatedAt: "desc" },
+        select: selectFields,
+      });
+    } catch {
+      const all = await db.workflowBlueprint.findMany({
+        orderBy: { updatedAt: "desc" },
+        select: selectFields,
+      });
+      workflows = userEmail
+        ? all.filter((w: any) => !w.userEmail || w.userEmail === userEmail)
+        : all;
+    }
 
     return NextResponse.json({
       success: true,
@@ -104,19 +122,29 @@ export async function POST(req: NextRequest) {
     const webhookSecret = `whsec_${crypto.randomBytes(16).toString("hex")}`;
 
     // 3. Persist new WorkflowBlueprint in PostgreSQL
-    const workflow = await db.workflowBlueprint.create({
-      data: {
-        name: trimmedName,
-        description: typeof description === "string" ? description.trim() : null,
-        isActive: true,
-        webhookSecret,
-        cronExpression,
-        nodesJson: nodes,
-        edgesJson: dagEdges,
-        adjacencyMap: validation.adjacencyMap,
-        baseIndegrees: validation.baseIndegrees,
-      },
-    });
+    const userEmail = getSessionUser(req)?.email || null;
+    const blueprintData: any = {
+      name: trimmedName,
+      description: typeof description === "string" ? description.trim() : null,
+      isActive: true,
+      webhookSecret,
+      cronExpression,
+      nodesJson: nodes,
+      edgesJson: dagEdges,
+      adjacencyMap: validation.adjacencyMap,
+      baseIndegrees: validation.baseIndegrees,
+    };
+    if (userEmail) {
+      blueprintData.userEmail = userEmail;
+    }
+
+    let workflow: any;
+    try {
+      workflow = await db.workflowBlueprint.create({ data: blueprintData });
+    } catch {
+      delete blueprintData.userEmail;
+      workflow = await db.workflowBlueprint.create({ data: blueprintData });
+    }
 
     return NextResponse.json(
       {

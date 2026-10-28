@@ -18,24 +18,39 @@ import { PullCord } from "@/components/kokonutui/pull-cord";
 import { LampCutoutSeparator } from "@/components/ui/lamp-cutout-separator";
 
 const VALID_TABS = ["home", "studio", "telemetry", "dlq", "architecture"];
+const PROTECTED_TABS = ["studio", "telemetry", "dlq"];
 
 export default function ChronoGraphApp() {
   const [selectedTab, setSelectedTab] = useState<string>("home");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [currentUser, setCurrentUser] = useState<{ email: string } | null>(null);
+  const [authLoaded, setAuthLoaded] = useState<boolean>(false);
 
-  // Restore active tab and theme on initial page load / refresh
+  // Check auth session
+  React.useEffect(() => {
+    let mounted = true;
+    fetch("/api/v1/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!mounted) return;
+        if (data?.success && data?.user) {
+          setCurrentUser(data.user);
+        } else {
+          setCurrentUser(null);
+        }
+        setAuthLoaded(true);
+      })
+      .catch(() => {
+        if (mounted) setAuthLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Restore saved theme on initial page load
   React.useEffect(() => {
     try {
-      const hash = window.location.hash.replace("#", "").toLowerCase();
-      if (VALID_TABS.includes(hash)) {
-        setSelectedTab(hash);
-      } else {
-        const savedTab = localStorage.getItem("chronograph_active_tab");
-        if (savedTab && VALID_TABS.includes(savedTab)) {
-          setSelectedTab(savedTab);
-        }
-      }
-
       const savedTheme = localStorage.getItem("chronograph_theme");
       if (savedTheme === "light" || savedTheme === "dark") {
         setTheme(savedTheme);
@@ -43,14 +58,37 @@ export default function ChronoGraphApp() {
     } catch {}
   }, []);
 
+  // Restore active tab and enforce protected tab redirection
+  React.useEffect(() => {
+    if (!authLoaded) return;
+    try {
+      const hash = window.location.hash.replace("#", "").toLowerCase();
+      let target = VALID_TABS.includes(hash)
+        ? hash
+        : localStorage.getItem("chronograph_active_tab") || "home";
+
+      if (!VALID_TABS.includes(target)) target = "home";
+
+      if (PROTECTED_TABS.includes(target) && !currentUser) {
+        window.location.href = "/login";
+        return;
+      }
+
+      setSelectedTab(target);
+    } catch {}
+  }, [authLoaded, currentUser]);
+
   const handleTabChange = (key: string) => {
-    if (VALID_TABS.includes(key)) {
-      setSelectedTab(key);
-      try {
-        localStorage.setItem("chronograph_active_tab", key);
-        window.history.replaceState(null, "", key === "home" ? window.location.pathname : `#${key}`);
-      } catch {}
+    if (!VALID_TABS.includes(key)) return;
+    if (PROTECTED_TABS.includes(key) && !currentUser) {
+      window.location.href = "/login";
+      return;
     }
+    setSelectedTab(key);
+    try {
+      localStorage.setItem("chronograph_active_tab", key);
+      window.history.replaceState(null, "", key === "home" ? window.location.pathname : `#${key}`);
+    } catch {}
   };
 
   const handleThemeChange = (newTheme: "dark" | "light") => {
@@ -61,7 +99,7 @@ export default function ChronoGraphApp() {
   };
 
   const handleLogin = () => {
-    // Auth hook point
+    window.location.href = "/login";
   };
 
   // Home page is strictly ALWAYS in dark mode per requirement
@@ -76,7 +114,9 @@ export default function ChronoGraphApp() {
       }`}
     >
       {/* Luminous fluid cursor trail on mouse movement */}
-      <FluidCursorTrail />
+      <div className="hidden md:block">
+        <FluidCursorTrail />
+      </div>
 
       {/* ── Kokonut UI Pull-Cord Component: Slide from right below navbar (Hidden on Home tab & mobile/tablet) ── */}
       <AnimatePresence>
@@ -120,6 +160,7 @@ export default function ChronoGraphApp() {
       >
         {/* Floating Glassmorphism Navbar with Swipeable Tabs */}
         <Navbar
+          currentUser={currentUser}
           onLogin={handleLogin}
           onQuickRun={() => handleTabChange("studio")}
           theme={theme}
@@ -135,13 +176,19 @@ export default function ChronoGraphApp() {
               />
             </TabPanel>
             <TabPanel id="studio" shouldForceMount className="h-full overflow-hidden relative">
-              <StudioView theme={isLightMode ? "light" : "dark"} />
+              {currentUser ? (
+                <StudioView theme={isLightMode ? "light" : "dark"} />
+              ) : null}
             </TabPanel>
             <TabPanel id="telemetry" shouldForceMount className="h-full overflow-y-auto no-scrollbar">
-              <TelemetryView theme={isLightMode ? "light" : "dark"} />
+              {currentUser ? (
+                <TelemetryView theme={isLightMode ? "light" : "dark"} />
+              ) : null}
             </TabPanel>
             <TabPanel id="dlq" shouldForceMount className="h-full overflow-y-auto no-scrollbar">
-              <DLQView theme={isLightMode ? "light" : "dark"} />
+              {currentUser ? (
+                <DLQView theme={isLightMode ? "light" : "dark"} />
+              ) : null}
             </TabPanel>
             <TabPanel id="architecture" shouldForceMount className="h-full overflow-y-auto no-scrollbar">
               <ArchitectureView theme={isLightMode ? "light" : "dark"} />
