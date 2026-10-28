@@ -320,7 +320,7 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
     let latestProgress = 0;
 
     const onScroll = () => {
-      if (trackScrollDistance <= 0) return;
+      if (!track || track.offsetHeight === 0 || trackScrollDistance <= 1) return;
       latestProgress = Math.min(1, Math.max(0, el.scrollTop / trackScrollDistance));
       currentProgressRef.current = latestProgress;
 
@@ -418,6 +418,18 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
     // Phase 2: Keyframe stride (every 8 frames) across the entire sequence
     // Phase 3: Fill in all remaining intermediate frames in non-blocking batches
     const loadAll = async () => {
+      // Do not load heavy frame sequence on mobile screens where scroll animation is disabled
+      if (typeof window !== "undefined" && window.innerWidth < 768) {
+        const handleResize = () => {
+          if (window.innerWidth >= 768) {
+            window.removeEventListener("resize", handleResize);
+            loadAll();
+          }
+        };
+        window.addEventListener("resize", handleResize);
+        return;
+      }
+
       // 1. Initial Frame
       await loadFrame(START_FRAME);
 
@@ -470,8 +482,119 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
         <div className="grid-overlay absolute inset-0 opacity-30" />
       </div>
 
-      {/* 700vh scroll track */}
-      <div ref={trackRef} className="relative z-10 h-[700vh] w-full">
+      {/* ── Mobile Phone View (md:hidden): Replaces the scroll animation with download.jpg in public ── */}
+      <div className="block md:hidden relative z-10 w-full overflow-hidden">
+        <div className="relative min-h-[92vh] w-full flex flex-col justify-between items-center px-4 pt-20 pb-8 overflow-hidden">
+          {/* Mobile Background Visual: /download.jpg with vignette */}
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+            <img
+              src="/download.jpg"
+              alt="ChronoGraph Cosmic Vortex"
+              fetchPriority="high"
+              loading="eager"
+              className="h-full w-full object-cover object-center scale-105"
+            />
+            {/* Ambient gradients for high contrast and readability */}
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0C100D]/85 via-[#0C100D]/40 to-[#0C100D]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(12,16,13,0.7)_100%)]" />
+          </div>
+
+          {/* Top: Branding, Title, Subtitle, and CTAs */}
+          <div className="relative z-10 flex flex-col items-center max-w-sm pt-4 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#243026] bg-[#141A15]/90 px-3 py-1 text-[10px] font-mono text-[#7FBF6A] mb-3 backdrop-blur-md">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#7FBF6A] animate-pulse" />
+              <span>DISTRIBUTED DAG ENGINE</span>
+            </div>
+
+            <PluckedText
+              text="CHRONOGRAPH"
+              accentStartIndex={6}
+              accentClassName="text-[#75d555ff]"
+              textClassName="text-[#E8ECE4]"
+              tension={1.2}
+              className="my-1 font-[family-name:var(--font-brand)] text-3xl sm:text-4xl tracking-tight"
+            />
+
+            <p className="mt-2 text-xs sm:text-sm text-[#C8D2C5] max-w-xs leading-relaxed drop-shadow">
+              High-throughput workflow orchestration with zero cycle deadlocks and atomic fan-out.
+            </p>
+
+            {/* Quick Actions */}
+            <div className="mt-5 flex items-center justify-center gap-3 w-full">
+              <button
+                onClick={() => onSelectTab?.("studio")}
+                type="button"
+                className="flex-1 max-w-[150px] flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-[#0C100D] bg-[#7FBF6A] hover:bg-[#92CF7D] active:scale-[0.98] transition-colors cursor-pointer border border-[#7FBF6A] shadow-lg shadow-[#7FBF6A]/20"
+              >
+                <Workflow className="h-3.5 w-3.5" />
+                <span>Studio</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                onClick={onLogin}
+                type="button"
+                className="flex-1 max-w-[150px] flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium text-[#E8ECE4] border border-[#243026] hover:border-[#7FBF6A]/50 hover:text-white active:scale-[0.98] transition-all cursor-pointer bg-[#141A15]/90 backdrop-blur-md"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                <span>Login</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Center Card: The Dormammu Loop? Cycle Guard spec */}
+          <div className="relative z-10 my-4 w-full max-w-[340px]">
+            <div
+              className="rounded-2xl p-4 sm:p-5 flex flex-col justify-between"
+              style={{
+                background: "rgba(20, 26, 21, 0.72)",
+                backdropFilter: "blur(20px) saturate(140%)",
+                WebkitBackdropFilter: "blur(20px) saturate(140%)",
+                border: "1px solid #243026",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)",
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="inline-flex items-center gap-1.5 rounded-md border border-[#243026] bg-[#141A15]/80 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.16em] text-[#8B968B]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#7FBF6A]" />
+                  <span>Cycle Guard</span>
+                </div>
+                <span className="font-mono text-[9px] text-[#7FBF6A]">O(V+E) INGEST</span>
+              </div>
+
+              <h3 className="font-script text-xl sm:text-2xl text-[#E8ECE4] mb-1 leading-tight">
+                The Dormammu Loop?
+              </h3>
+              <p className="text-[11px] text-[#8B968B] leading-relaxed mb-3">
+                ChronoGraph runs 3-color DFS and Kahn&apos;s algorithm on every DAG blueprint,
+                terminating cyclic deadlocks before a single worker is dispatched.
+              </p>
+
+              <div className="rounded-xl border border-[#243026] bg-[#0C100D]/70 p-2.5 font-mono text-[9.5px] space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-[#8B968B]">ALGORITHM</span>
+                  <span className="text-[#E8ECE4] font-medium">KAHN_DFS_V3</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#8B968B]">CYCLE_GUARD</span>
+                  <span className="text-[#7FBF6A] font-medium">ACTIVE // STRICT</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom: Scroll indicator to architecture & capabilities */}
+          <div className="relative z-10 flex flex-col items-center gap-1 text-[#8B968B] select-none pt-2">
+            <span className="text-[10px] tracking-widest uppercase font-mono text-[#7FBF6A]">
+              Scroll to explore engine
+            </span>
+            <div className="h-4 w-px bg-gradient-to-b from-[#7FBF6A] to-transparent animate-pulse" />
+          </div>
+        </div>
+      </div>
+
+      {/* 700vh scroll track (Desktop & Tablet only) */}
+      <div ref={trackRef} className="hidden md:block relative z-10 h-[700vh] w-full">
         <div className="sticky top-0 flex h-screen w-full items-center justify-center overflow-hidden">
           {/* 3D Canvas with hardware compositor scaling */}
           <canvas
