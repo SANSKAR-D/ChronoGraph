@@ -13,7 +13,17 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<SendOt
   const pass = process.env.SMTP_PASS;
   const from = process.env.SMTP_FROM || `"ChronoGraph" <noreply@chronograph.dev>`;
 
+  const isProd = process.env.NODE_ENV === "production";
+
   if (!host || !user || !pass) {
+    if (isProd) {
+      console.error(`[SMTP Error] SMTP credentials not configured in production. Cannot send verification email to ${toEmail}.`);
+      return {
+        success: false,
+        devMode: false,
+        error: "SMTP service is unconfigured. Cannot deliver verification code in production.",
+      };
+    }
     // In local dev without SMTP configured, log to console
     console.log(`[SMTP DevMode] One-time verification code for ${toEmail}: ${otp}`);
     return { success: true, devMode: true };
@@ -26,7 +36,7 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<SendOt
       secure: port === 465,
       auth: { user, pass },
       tls: {
-        rejectUnauthorized: process.env.NODE_ENV === "production",
+        rejectUnauthorized: isProd,
       },
     });
 
@@ -50,6 +60,10 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<SendOt
     return { success: true, devMode: false };
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
+    if (isProd) {
+      console.error(`[SMTP Error] Failed to send email via SMTP to ${toEmail}: ${errMsg}`);
+      return { success: false, devMode: false, error: "Failed to dispatch verification email via SMTP." };
+    }
     console.warn(`[SMTP Fallback] Failed to send email via SMTP (${errMsg}); falling back to local dev mode for ${toEmail}: ${otp}`);
     return { success: true, devMode: true, error: errMsg };
   }

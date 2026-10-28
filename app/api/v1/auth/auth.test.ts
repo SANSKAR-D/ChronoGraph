@@ -121,5 +121,28 @@ describe("Authentication API Routes", () => {
     const setCookie = res.headers.get("set-cookie");
     expect(setCookie).toContain("chronograph_session=;");
   });
+
+  it("POST /api/v1/auth/send-otp in production fails safely without leaking devOtp when SMTP is unconfigured", async () => {
+    const prevEnv = process.env.NODE_ENV;
+    try {
+      (process.env as any).NODE_ENV = "production";
+      const req = new NextRequest("http://localhost:3000/api/v1/auth/send-otp", {
+        method: "POST",
+        body: JSON.stringify({ email: "prod-user@company.com" }),
+      });
+
+      const res = await sendOtpPOST(req);
+      const data = await res.json();
+
+      expect(res.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.devOtp).toBeUndefined();
+      expect(data.devMode).toBeUndefined();
+      // Verify pending OTP in Redis was invalidated/cleaned up
+      expect(redisStore["otp:prod-user@company.com"]).toBeUndefined();
+    } finally {
+      (process.env as any).NODE_ENV = prevEnv;
+    }
+  });
 });
 

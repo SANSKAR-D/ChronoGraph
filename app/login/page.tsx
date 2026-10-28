@@ -10,7 +10,6 @@ export default function LoginPage() {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
-  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -28,7 +27,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setSuccessMsg(null);
-    setDevOtp(null);
 
     const trimmed = email.trim();
     if (!trimmed || !trimmed.includes("@")) {
@@ -51,9 +49,6 @@ export default function LoginPage() {
 
       setStep("otp");
       setSuccessMsg(data.message || `Code sent to ${trimmed}`);
-      if (data.devOtp) {
-        setDevOtp(data.devOtp);
-      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -179,18 +174,6 @@ export default function LoginPage() {
           )}
         </AnimatePresence>
 
-        {/* Dev Mode OTP Callout */}
-        {devOtp && (
-          <div
-            onClick={() => setOtp(devOtp)}
-            className="mb-4 p-2.5 rounded-xl border border-[#E5B86A]/40 bg-[#E5B86A]/10 text-[#E5B86A] text-xs font-mono cursor-pointer hover:border-[#E5B86A] transition-all flex items-center justify-between"
-            title="Click to auto-fill code"
-          >
-            <span>Dev Mode: Code is <strong>{devOtp}</strong></span>
-            <span className="text-[10px] underline">Auto-fill</span>
-          </div>
-        )}
-
         {/* Step 1: Email Form */}
         {step === "email" ? (
           <form onSubmit={handleSendOtp} className="space-y-4">
@@ -214,7 +197,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="developer@company.com"
+                  placeholder="alex@company.com"
                   required
                   autoFocus
                   className={`w-full pl-10 pr-4 py-2.5 text-xs rounded-xl border font-mono transition-all outline-none focus:ring-2 focus:ring-[#7FBF6A]/40 ${
@@ -229,7 +212,7 @@ export default function LoginPage() {
                   isLight ? "text-[#8B968B]" : "text-[#5E695E]"
                 }`}
               >
-                We&apos;ll send a secure 6-digit one-time code via SMTP.
+                We&apos;ll send a secure 6-digit one-time verification code.
               </p>
             </div>
 

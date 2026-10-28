@@ -4,10 +4,36 @@ import { redis } from "../redis/client";
 
 const COOKIE_NAME = "chronograph_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const SECRET = process.env.WEBHOOK_SECRET || "chronograph_auth_session_secret_2026";
+const DEFAULT_INSECURE_SECRET = "chronograph_auth_session_secret_2026";
 
 export interface AuthSessionUser {
   email: string;
+}
+
+/**
+ * Resolves the session secret.
+ * In production (NODE_ENV === 'production'), strictly requires a non-default secret
+ * to prevent cookie forgery.
+ */
+export function getSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET || process.env.WEBHOOK_SECRET;
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (isProd) {
+    if (
+      !secret ||
+      secret === DEFAULT_INSECURE_SECRET ||
+      secret === "chronograph_secret_development_key_2026" ||
+      secret === "chronograph_webhook_secret_2026"
+    ) {
+      throw new Error(
+        "Production configuration error: WEBHOOK_SECRET or SESSION_SECRET must be set to a secure, non-default value in production."
+      );
+    }
+    return secret;
+  }
+
+  return secret || DEFAULT_INSECURE_SECRET;
 }
 
 /**
@@ -35,12 +61,13 @@ export async function verifyStoredOtp(email: string, otp: string): Promise<boole
  * Signs a session payload into a secure HMAC token.
  */
 export function signSessionToken(email: string): string {
+  const secret = getSessionSecret();
   const payload = JSON.stringify({
     email: email.trim().toLowerCase(),
     exp: Date.now() + SESSION_TTL_MS,
   });
   const b64Payload = Buffer.from(payload).toString("base64url");
-  const hmac = crypto.createHmac("sha256", SECRET).update(b64Payload).digest("hex");
+  const hmac = crypto.createHmac("sha256", secret).update(b64Payload).digest("hex");
   return `${b64Payload}.${hmac}`;
 }
 
@@ -49,10 +76,11 @@ export function signSessionToken(email: string): string {
  */
 export function verifySessionToken(token: string): AuthSessionUser | null {
   try {
+    const secret = getSessionSecret();
     const [b64Payload, signature] = token.split(".");
     if (!b64Payload || !signature) return null;
 
-    const expectedSig = crypto.createHmac("sha256", SECRET).update(b64Payload).digest("hex");
+    const expectedSig = crypto.createHmac("sha256", secret).update(b64Payload).digest("hex");
     if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
       return null;
     }

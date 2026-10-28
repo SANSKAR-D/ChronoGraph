@@ -88,5 +88,51 @@ describe("Auth Session & OTP Infrastructure", () => {
     expect(res.success).toBe(true);
     expect(res.devMode).toBe(true);
   });
+
+  it("sendOtpEmail fails safely without leaking OTP in production when SMTP is unconfigured", async () => {
+    const prevEnv = process.env.NODE_ENV;
+    try {
+      (process.env as any).NODE_ENV = "production";
+      const res = await sendOtpEmail("test@example.com", "123456");
+      expect(res.success).toBe(false);
+      expect(res.devMode).toBe(false);
+      expect(res.error).toContain("SMTP service is unconfigured");
+    } finally {
+      (process.env as any).NODE_ENV = prevEnv;
+    }
+  });
+
+  it("enforces secure secret in production and rejects default/missing secrets", () => {
+    const prevEnv = process.env.NODE_ENV;
+    const prevSecret = process.env.WEBHOOK_SECRET;
+    const prevSessionSecret = process.env.SESSION_SECRET;
+
+    try {
+      (process.env as any).NODE_ENV = "production";
+      delete process.env.WEBHOOK_SECRET;
+      delete process.env.SESSION_SECRET;
+
+      // Signing without configured production secret throws error
+      expect(() => signSessionToken("user@prod.com")).toThrow(
+        /Production configuration error/
+      );
+
+      // Verifying token with default or missing secret returns null
+      expect(verifySessionToken("invalid.token")).toBeNull();
+
+      // With a valid production secret configured, tokens work securely
+      process.env.WEBHOOK_SECRET = "production_super_secure_random_key_998877";
+      const prodToken = signSessionToken("user@prod.com");
+      expect(prodToken).toContain(".");
+      const verified = verifySessionToken(prodToken);
+      expect(verified?.email).toBe("user@prod.com");
+    } finally {
+      (process.env as any).NODE_ENV = prevEnv;
+      if (prevSecret !== undefined) process.env.WEBHOOK_SECRET = prevSecret;
+      else delete process.env.WEBHOOK_SECRET;
+      if (prevSessionSecret !== undefined) process.env.SESSION_SECRET = prevSessionSecret;
+      else delete process.env.SESSION_SECRET;
+    }
+  });
 });
 

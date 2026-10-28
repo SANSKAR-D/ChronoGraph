@@ -37,17 +37,23 @@ function verifyWebhookAuthentication(
   }
 
   // 2. Direct secret header support (developer ease of use & studio testing)
-  if (headers.get("x-studio-dispatch") === "true") return true;
+  const isDev = process.env.NODE_ENV !== "production";
+  if (isDev && headers.get("x-studio-dispatch") === "true") return true;
+
   const directSecret = headers.get("x-webhook-secret") || "";
   const authHeader = headers.get("authorization") || "";
   const bearerToken = authHeader.startsWith("Bearer ")
     ? authHeader.slice(7).trim()
     : "";
 
-  if (directSecret === primarySecret || directSecret === fallbackSecret || directSecret === "chronograph_webhook_secret_2026") {
+  if (
+    directSecret === primarySecret ||
+    (fallbackSecret && directSecret === fallbackSecret) ||
+    (isDev && directSecret === "chronograph_webhook_secret_2026")
+  ) {
     return true;
   }
-  if (bearerToken && (bearerToken === primarySecret || bearerToken === fallbackSecret)) {
+  if (bearerToken && (bearerToken === primarySecret || (fallbackSecret && bearerToken === fallbackSecret))) {
     return true;
   }
 
@@ -103,10 +109,12 @@ export async function POST(
 
   try {
     // 1. Sliding-Window Rate Limiting (120 req / 60s window per endpoint)
+    const isDev = process.env.NODE_ENV !== "production";
     const isBenchmark =
-      req.headers.get("x-benchmark") === "true" ||
-      req.headers.get("x-bypass-rate-limit") === "true" ||
-      req.nextUrl.searchParams.get("benchmark") === "true";
+      isDev &&
+      (req.headers.get("x-benchmark") === "true" ||
+        req.headers.get("x-bypass-rate-limit") === "true" ||
+        req.nextUrl.searchParams.get("benchmark") === "true");
 
     const rateLimit = isBenchmark
       ? { allowed: true, remaining: 9999, resetSeconds: 0 }
