@@ -28,6 +28,15 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
   });
 
   const [workers, setWorkers] = useState<WorkerNode[]>([]);
+  const [autoscaler, setAutoscaler] = useState<{
+    enabled: boolean;
+    status: string;
+    currentWorkers: number;
+    desiredWorkers: number;
+    minWorkers: number;
+    maxWorkers: number;
+    lastAction: string;
+  } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -44,6 +53,9 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
               delayed: data.queueMetrics.delayed ?? data.queueMetrics.Delayed ?? 0,
               dlq: data.queues?.deadLetter?.database?.unresolved ?? data.queueMetrics.dlq ?? 0,
             });
+          }
+          if (data.autoscaler) {
+            setAutoscaler(data.autoscaler);
           }
           if (Array.isArray(data.workers)) {
             setWorkers(
@@ -96,6 +108,10 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
         try {
           const parsed = JSON.parse(dataStr);
           if (parsed.status === "connected" && !parsed.event) return;
+          if (parsed.event === "AUTOSCALER_UPDATE") {
+            setAutoscaler(parsed);
+            return;
+          }
           const eventName = parsed.event || (parsed.nodeId ? `EXEC:${parsed.nodeId}` : "EVENT");
           const status = parsed.status || (eventName.includes("FAIL") ? "FAILED" : "SUCCESS");
           const latency = parsed.latency ?? (parsed.durationMs ? Math.round(parsed.durationMs) : 12);
@@ -171,7 +187,7 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
           type="button"
           className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
             isLight
-              ? "border-[#D1D9D0] bg-white text-[#141A15] hover:border-[#7FBF6A] shadow-xs active:scale-95"
+              ? "border-[#D1D9D0] bg-[#FAFBF9] text-[#141A15] hover:border-[#7FBF6A] shadow-xs active:scale-95"
               : "border-[#243026] bg-[#0C100D] text-[#E8ECE4] hover:border-[#7FBF6A]/50 shadow-xs active:scale-95"
           }`}
         >
@@ -220,7 +236,7 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
             key={label}
             className={`rounded-2xl p-4 border transition-all ${
               isLight
-                ? "border-[#E2E6E3] bg-white shadow-xs"
+                ? "border-[#E2E6E3] bg-[#FAFBF9] shadow-xs"
                 : "border-[#243026] bg-[#141A15] shadow-xs"
             }`}
           >
@@ -252,7 +268,7 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
       <div
         className={`rounded-2xl overflow-hidden border ${
           isLight
-            ? "border-[#E2E6E3] bg-white shadow-xs"
+            ? "border-[#E2E6E3] bg-[#FAFBF9] shadow-xs"
             : "border-[#243026] bg-[#141A15] shadow-xs"
         }`}
       >
@@ -261,22 +277,36 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
             isLight ? "border-[#E2E6E3] bg-[#F7F9F6]" : "border-[#243026] bg-[#0C100D]/60"
           }`}
         >
-          <div className="flex items-center gap-2">
-            <Server className="h-4 w-4 text-[#7FBF6A]" />
-            <h3
-              className={`text-sm font-bold ${
-                isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
-              }`}
-            >
-              Active Worker Pool ({workers.length} {workers.length === 1 ? "Node" : "Nodes"})
-            </h3>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Server className="h-4 w-4 text-[#7FBF6A]" />
+              <h3
+                className={`text-sm font-bold ${
+                  isLight ? "text-[#141A15]" : "text-[#E8ECE4]"
+                }`}
+              >
+                Active Worker Pool ({workers.length} {workers.length === 1 ? "Node" : "Nodes"})
+              </h3>
+            </div>
+            {autoscaler?.enabled && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium border bg-[#7FBF6A]/10 text-[#7FBF6A] border-[#7FBF6A]/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#7FBF6A] animate-pulse" />
+                Celery-Style Autoscaler ({autoscaler.currentWorkers}/{autoscaler.maxWorkers})
+                {autoscaler.status === "scaling_up" && (
+                  <span className="text-amber-400 font-bold ml-1">↑ Scaling Up</span>
+                )}
+                {autoscaler.status === "scaling_down" && (
+                  <span className="text-blue-400 font-bold ml-1">↓ Scaling Down</span>
+                )}
+              </span>
+            )}
           </div>
           <span
             className={`text-[11px] font-mono font-medium ${
               isLight ? "text-[#5E695E]" : "text-[#8B968B]"
             }`}
           >
-            Auto-balanced concurrency
+            {autoscaler?.lastAction || "Auto-balanced concurrency"}
           </span>
         </div>
         <div className="relative z-10 overflow-x-auto">
@@ -313,7 +343,7 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
                       <Server className="h-5 w-5 opacity-40" />
                       <span>No active background workers connected.</span>
                       <span className="text-[10px] opacity-70">
-                        Run <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10">npm run worker</code> in a terminal to register BullMQ worker nodes.
+                        Run <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10">npm run worker:autoscale</code> to enable Celery-style dynamic autoscaling, or <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10">npm run worker</code> for a fixed worker.
                       </span>
                     </div>
                   </td>
@@ -385,7 +415,7 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
       <div
         className={`rounded-2xl p-5 border ${
           isLight
-            ? "border-[#E2E6E3] bg-white shadow-xs"
+            ? "border-[#E2E6E3] bg-[#FAFBF9] shadow-xs"
             : "border-[#243026] bg-[#141A15] shadow-xs"
         }`}
       >

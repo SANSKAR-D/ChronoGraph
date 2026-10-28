@@ -6,6 +6,7 @@ import {
   getDeadLetterQueue,
 } from "@/lib/queue/bullmq";
 import { WorkerHeartbeatPayload } from "@/src/workers/dag-worker";
+import { AutoscalerTelemetryState } from "@/src/workers/autoscaler";
 
 export interface QueueCountMetrics {
   waiting: number;
@@ -74,6 +75,7 @@ export interface ClusterHealthResult {
     activeRuns?: number;
     error?: string;
   };
+  autoscaler?: AutoscalerTelemetryState;
 }
 
 /**
@@ -128,6 +130,17 @@ export async function getClusterHealth(
     redisError = err instanceof Error ? err.message : String(err);
   }
 
+  // 1b. Fetch Autoscaler state from Redis
+  let autoscalerState: AutoscalerTelemetryState | undefined = undefined;
+  try {
+    const rawAutoscaler = await redisClient.get("cluster:autoscaler:state");
+    if (rawAutoscaler) {
+      autoscalerState = JSON.parse(rawAutoscaler);
+    }
+  } catch {
+    // Non-critical telemetry enrichment
+  }
+
   // 2. Query BullMQ Queue Job Counts
   let dagCounts = { waiting: 0, active: 0, delayed: 0, failed: 0, completed: 0 };
   let cronCounts = { waiting: 0, active: 0, delayed: 0, failed: 0 };
@@ -145,15 +158,6 @@ export async function getClusterHealth(
     console.warn("[ClusterHealth] Failed to get DAG queue counts:", err);
   }
 
-  // Sync real-time active jobs with BullMQ queue count if active jobs are in-flight
-  if (workers.length > 0 && dagCounts.active > 0) {
-    for (const w of workers) {
-      if (!w.activeJobs || w.activeJobs === 0) {
-        w.activeJobs = dagCounts.active;
-        w.status = "busy";
-      }
-    }
-  }
 
   try {
     cronCounts = await cronQueue.getJobCounts(
@@ -294,5 +298,6 @@ export async function getClusterHealth(
       activeRuns: dbActiveRuns,
       ...(dbError ? { error: dbError } : {}),
     },
+    ...(autoscalerState ? { autoscaler: autoscalerState } : {}),
   };
 }

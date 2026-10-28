@@ -50,9 +50,9 @@
 ---
 
 ## Phase 6: Benchmarks, Chaos Demo & Viva Defense Prep (Hours 30–36)
-- [ ] **T6.1 (Pre-Seeded Demo Workflows):** Seed 3 ready-to-run templates on startup so judges don't start with an empty canvas[cite: 16]:
+- [x] **T6.1 (Pre-Seeded Demo Workflows):** Seed 3 ready-to-run templates on startup so judges don't start with an empty canvas[cite: 16]:
   1. *Diamond Payment Settlement DAG* (Demonstrates parallel fan-out & atomic fan-in)[cite: 18].
   2. *Chaos Flaky API Pipeline* (Demonstrates Exponential Backoff + Jitter & DLQ Replay)[cite: 8, 18].
   3. *Cron Data Sync Pipeline* (Demonstrates scheduled triggers & JSON transformation)[cite: 8].
-- [ ] **T6.2 (Load Test Benchmark Script):** Write `scripts/benchmark-load.ts` (or k6 script) firing 200 concurrent webhook requests and outputting $p50$, $p95$, $p99$ ingestion latency and zero double-execution proof[cite: 8, 18].
-- [ ] **T6.3 (Comprehensive README & Tool Disclosure):** Document the architecture diagram, Kahn's cycle-detection math, Lua script explanation, benchmark tables, and complete tool disclosure (`@xyflow/react`, `motion`, `Skiper UI`, `Kokonut UI`, `react-aria-components`, `BullMQ`, `Redis`, `PostgreSQL`) before commit freeze[cite: 2, 8, 16, 18].
+- [x] **T6.2 (Load Test Benchmark Script):** Write `scripts/benchmark-load.ts` (or k6 script) firing 200 concurrent webhook requests and outputting $p50$, $p95$, $p99$ ingestion latency and zero double-execution proof[cite: 8, 18].
+- [x] **T6.3 (Comprehensive README & Tool Disclosure):** Document the architecture diagram, Kahn's cycle-detection math, Lua script explanation, benchmark tables, and complete tool disclosure (`@xyflow/react`, `motion`, `Skiper UI`, `Kokonut UI`, `react-aria-components`, `BullMQ`, `Redis`, `PostgreSQL`) before commit freeze[cite: 2, 8, 16, 18].

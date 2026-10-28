@@ -5,10 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "worker": "tsx src/workers/dag-worker.ts",
+    "worker:autoscale": "tsx src/workers/autoscaler.ts",
+    "seed": "tsx scripts/seed-workflows.ts",
+    "benchmark": "tsx scripts/benchmark-load.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:autoscale": "tsx scripts/test-autoscaler.ts",
+    "test:bulk": "tsx scripts/test-bulk-requests.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

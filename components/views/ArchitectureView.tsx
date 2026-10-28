@@ -58,7 +58,7 @@ export function ArchitectureView({ theme = "dark" }: { theme?: "dark" | "light" 
                 isSelected
                   ? "bg-[#7FBF6A] text-[#0C100D] font-bold shadow-md shadow-[#7FBF6A]/25 border border-[#7FBF6A]"
                   : isLight
-                  ? "border border-[#E2E6E3] bg-white text-[#5E695E] hover:text-[#141A15] hover:border-[#7FBF6A]"
+                  ? "border border-[#E2E6E3] bg-[#FAFBF9] text-[#5E695E] hover:text-[#141A15] hover:border-[#7FBF6A]"
                   : "border border-[#243026] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/50 bg-[#141A15]"
               }`}
             >
@@ -73,7 +73,7 @@ export function ArchitectureView({ theme = "dark" }: { theme?: "dark" | "light" 
       <div
         className={`rounded-2xl p-6 space-y-4 border ${
           isLight
-            ? "border-[#E2E6E3] bg-white shadow-xs"
+            ? "border-[#E2E6E3] bg-[#FAFBF9] shadow-xs"
             : "border-[#243026] bg-[#141A15] shadow-xs"
         }`}
       >

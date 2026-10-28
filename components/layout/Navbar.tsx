@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { TabList, Tab, TabSelectionIndicator } from "@/components/ui/swipeable-tabs";
 import { LogIn } from "lucide-react";
@@ -11,10 +11,57 @@ interface NavbarProps {
   onLogin?: () => void;
   theme?: "dark" | "light";
   onToggleTheme?: () => void;
+  hasDlqAlert?: boolean;
 }
 
-export function Navbar({ onQuickRun, onLogin, theme = "dark", onToggleTheme }: NavbarProps) {
+export function Navbar({
+  onQuickRun,
+  onLogin,
+  theme = "dark",
+  onToggleTheme,
+  hasDlqAlert: propHasDlqAlert,
+}: NavbarProps) {
   const isLight = theme === "light";
+  const [hasDlqAlert, setHasDlqAlert] = useState<boolean>(Boolean(propHasDlqAlert));
+
+  useEffect(() => {
+    if (propHasDlqAlert !== undefined) {
+      setHasDlqAlert(propHasDlqAlert);
+    }
+  }, [propHasDlqAlert]);
+
+  useEffect(() => {
+    let mounted = true;
+    const checkDlq = async () => {
+      try {
+        const res = await fetch("/api/v1/dlq");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (mounted && data.success) {
+          const count =
+            typeof data.unresolvedCount === "number"
+              ? data.unresolvedCount
+              : Array.isArray(data.jobs)
+              ? data.jobs.filter((j: any) => j.status === "pending").length
+              : 0;
+          setHasDlqAlert(count > 0);
+        }
+      } catch {
+        // ignore network error
+      }
+    };
+
+    checkDlq();
+    const interval = setInterval(checkDlq, 4000);
+    const onDlqChange = () => checkDlq();
+    window.addEventListener("chronograph:dlq-change", onDlqChange);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      window.removeEventListener("chronograph:dlq-change", onDlqChange);
+    };
+  }, []);
 
   return (
     <motion.header
@@ -27,12 +74,12 @@ export function Navbar({ onQuickRun, onLogin, theme = "dark", onToggleTheme }: N
       <div
         className="pointer-events-auto flex items-center justify-between w-full max-w-[1600px] rounded-full px-3 sm:px-5 py-2 sm:py-2.5 transition-all duration-300 gap-1 sm:gap-3"
         style={{
-          background: isLight ? "rgba(255, 255, 255, 0.85)" : "rgba(20, 26, 21, 0.65)",
+          background: isLight ? "rgba(250, 251, 249, 0.88)" : "rgba(20, 26, 21, 0.65)",
           backdropFilter: "blur(20px) saturate(140%)",
           WebkitBackdropFilter: "blur(20px) saturate(140%)",
           border: isLight ? "1px solid #D1D9D0" : "1px solid #243026",
           boxShadow: isLight
-            ? "0 8px 32px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)"
+            ? "0 8px 32px rgba(0,0,0,0.06), inset 0 1px 0 rgba(250, 251, 249, 0.9)"
             : "0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)",
         }}
       >
@@ -70,8 +117,10 @@ export function Navbar({ onQuickRun, onLogin, theme = "dark", onToggleTheme }: N
               </Tab>
               <Tab id="dlq">
                 <span>DLQ</span>
-                {/* alert dot in muted terracotta red #E5735C */}
-                <span className="ml-0.5 inline-flex h-1.5 w-1.5 rounded-full bg-[#E5735C] mb-1.5" />
+                {/* alert dot in muted terracotta red #E5735C - visible only when DLQ is not empty */}
+                {hasDlqAlert && (
+                  <span className="ml-0.5 inline-flex h-1.5 w-1.5 rounded-full bg-[#E5735C] mb-1.5 animate-pulse" />
+                )}
               </Tab>
               <Tab id="architecture">
                 <span className="hidden sm:inline">Architecture</span>
@@ -90,7 +139,7 @@ export function Navbar({ onQuickRun, onLogin, theme = "dark", onToggleTheme }: N
               type="button"
               className={`lg:hidden flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full border transition-colors cursor-pointer ${
                 isLight
-                  ? "border-[#D1D9D0] bg-white text-[#5E695E] hover:text-[#141A15]"
+                  ? "border-[#D1D9D0] bg-[#FAFBF9] text-[#5E695E] hover:text-[#141A15]"
                   : "border-[#243026] bg-[#141A15] text-[#8B968B] hover:text-[#E8ECE4]"
               }`}
               title="Toggle theme"

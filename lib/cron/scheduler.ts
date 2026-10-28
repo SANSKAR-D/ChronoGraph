@@ -207,6 +207,11 @@ export async function removeWorkflowCron(
 }
 
 /**
+ * Alias for removeWorkflowCron for semantic clarity in workflow deletion
+ */
+export const removeRepeatableJobScheduler = removeWorkflowCron;
+
+/**
  * Fetches all registered BullMQ repeatable job schedulers and enriches them
  * with PostgreSQL workflow blueprint metadata.
  */

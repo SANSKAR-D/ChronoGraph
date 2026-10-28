@@ -38,9 +38,37 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
   const [cronPattern, setCronPattern] = useState<string>("*/5 * * * *");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [eligibleWorkflows, setEligibleWorkflows] = useState<
+    Array<{ id: string; name: string; cronExpression?: string | null }>
+  >([]);
 
   // Triggering state per schedulerId
   const [triggeringId, setTriggeringId] = useState<string | null>(null);
+
+  const fetchEligibleWorkflows = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/workflows");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.workflows)) {
+        setEligibleWorkflows(data.workflows);
+        setSelectedWorkflowId((prev) => {
+          if (prev) return prev;
+          if (data.workflows.length > 0) {
+            const first = data.workflows[0];
+            setCronPattern(first.cronExpression || "");
+            return first.id;
+          }
+          return "";
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const selectedWorkflow = eligibleWorkflows.find((w) => w.id === selectedWorkflowId);
+  const hasSchedule = Boolean(selectedWorkflow?.cronExpression);
 
   const fetchSchedulers = useCallback(async () => {
     try {
@@ -50,9 +78,6 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
       const json = await res.json();
       if (json?.success && Array.isArray(json.schedulers)) {
         setSchedulers(json.schedulers);
-        if (json.schedulers.length > 0 && !selectedWorkflowId) {
-          setSelectedWorkflowId(json.schedulers[0].workflowId);
-        }
       }
     } catch {
       // Ignore transient network aborts during Next.js reload/restart
@@ -60,14 +85,25 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [selectedWorkflowId]);
+  }, []);
 
   useEffect(() => {
     fetchSchedulers();
+    fetchEligibleWorkflows();
     // Auto poll every 10 seconds for real-time schedule alignment
-    const timer = setInterval(fetchSchedulers, 10000);
-    return () => clearInterval(timer);
-  }, [fetchSchedulers]);
+    const timer = setInterval(() => {
+      fetchSchedulers();
+      fetchEligibleWorkflows();
+    }, 10000);
+
+    const onWfChange = () => fetchEligibleWorkflows();
+    window.addEventListener("chronograph:workflows-change", onWfChange);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("chronograph:workflows-change", onWfChange);
+    };
+  }, [fetchSchedulers, fetchEligibleWorkflows]);
 
   const handleTriggerNow = async (workflowId: string, name: string) => {
     try {
@@ -125,7 +161,7 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
 
   const handleCreateOrUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedWorkflowId || !cronPattern) return;
+    if (!selectedWorkflowId || !cronPattern || !hasSchedule) return;
 
     try {
       setIsSubmitting(true);
@@ -164,7 +200,7 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
     <div
       className={`rounded-2xl overflow-hidden border ${
         isLight
-          ? "border-[#E2E6E3] bg-white shadow-xs"
+          ? "border-[#E2E6E3] bg-[#FAFBF9] shadow-xs"
           : "border-[#243026] bg-[#141A15] shadow-xs"
       }`}
     >
@@ -208,7 +244,7 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
             type="button"
             className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-mono transition cursor-pointer ${
               isLight
-                ? "border-[#D1D9D0] bg-white text-[#141A15] hover:border-[#7FBF6A]"
+                ? "border-[#D1D9D0] bg-[#FAFBF9] text-[#141A15] hover:border-[#7FBF6A]"
                 : "border-[#243026] bg-[#0C100D] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40"
             }`}
             title="Refresh BullMQ Schedulers"
@@ -275,25 +311,48 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label
-                className={`block text-[11px] font-mono mb-1 ${
-                  isLight ? "text-[#5E695E]" : "text-[#8B968B]"
-                }`}
-              >
-                Workflow Blueprint (UUID or Select)
-              </label>
-              <input
-                type="text"
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  className={`block text-[11px] font-mono ${
+                    isLight ? "text-[#5E695E]" : "text-[#8B968B]"
+                  }`}
+                >
+                  Workflow Blueprint (Select Name)
+                </label>
+                <span className="text-[10px] font-mono text-[#7FBF6A]">
+                  {eligibleWorkflows.length} available
+                </span>
+              </div>
+              <select
                 required
                 value={selectedWorkflowId}
-                onChange={(e) => setSelectedWorkflowId(e.target.value)}
-                placeholder="e.g. 9b2156d7-0162-4290-..."
-                className={`w-full rounded-xl border px-3.5 py-2 text-xs font-mono focus:outline-none focus:border-[#7FBF6A] ${
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedWorkflowId(val);
+                  const matched = eligibleWorkflows.find((w) => w.id === val);
+                  setCronPattern(matched?.cronExpression || "");
+                }}
+                className={`w-full rounded-xl border px-3.5 py-2 text-xs font-mono focus:outline-none focus:border-[#7FBF6A] cursor-pointer ${
                   isLight
-                    ? "border-[#D1D9D0] bg-white text-[#141A15]"
+                    ? "border-[#D1D9D0] bg-[#F8FAF7] text-[#141A15]"
                     : "border-[#243026] bg-[#141A15] text-[#E8ECE4]"
                 }`}
-              />
+              >
+                {eligibleWorkflows.length === 0 ? (
+                  <option value="" disabled>Loading eligible workflows...</option>
+                ) : (
+                  eligibleWorkflows.map((wf) => (
+                    <option key={wf.id} value={wf.id}>
+                      {wf.name} {wf.cronExpression ? `(Active: ${wf.cronExpression})` : "(No schedule)"}
+                    </option>
+                  ))
+                )}
+              </select>
+              {!hasSchedule && selectedWorkflow && (
+                <p className="text-[10px] font-mono text-amber-500/90 mt-1">
+                  Workflow has no schedule. Upserting is disabled.
+                </p>
+              )}
             </div>
 
             <div>
@@ -313,14 +372,21 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
                   placeholder="*/5 * * * *"
                   className={`flex-1 rounded-xl border px-3.5 py-2 text-xs font-mono focus:outline-none focus:border-[#7FBF6A] ${
                     isLight
-                      ? "border-[#D1D9D0] bg-white text-[#141A15]"
+                      ? "border-[#D1D9D0] bg-[#F8FAF7] text-[#141A15]"
                       : "border-[#243026] bg-[#141A15] text-[#E8ECE4]"
                   }`}
                 />
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="rounded-xl border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] px-4 py-2 text-xs font-mono font-bold text-[#0C100D] transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                  disabled={isSubmitting || !hasSchedule || !cronPattern.trim()}
+                  className="rounded-xl border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] px-4 py-2 text-xs font-mono font-bold text-[#0C100D] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+                  title={
+                    !hasSchedule
+                      ? "Selected workflow has no schedule configured"
+                      : isSubmitting
+                      ? "Registering..."
+                      : "Upsert repeatable job schedule"
+                  }
                 >
                   {isSubmitting ? "Registering..." : "Upsert Schedule"}
                 </button>
@@ -347,7 +413,7 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
                 onClick={() => setCronPattern(p.val)}
                 className={`px-2 py-0.5 rounded border transition-colors cursor-pointer ${
                   isLight
-                    ? "border-[#D1D9D0] bg-white text-[#141A15] hover:border-[#7FBF6A]"
+                    ? "border-[#D1D9D0] bg-[#FAFBF9] text-[#141A15] hover:border-[#7FBF6A]"
                     : "border-[#243026] bg-[#141A15] text-[#8B968B] hover:border-[#7FBF6A]/50 hover:text-[#E8ECE4]"
                 }`}
               >
@@ -395,7 +461,7 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
                   key={job.schedulerId}
                   className={`rounded-xl border p-4 transition-all flex flex-wrap items-center justify-between gap-4 ${
                     isLight
-                      ? "border-[#D1D9D0] bg-white hover:border-[#7FBF6A]/60 shadow-xs"
+                      ? "border-[#D1D9D0] bg-[#FAFBF9] hover:border-[#7FBF6A]/60 shadow-xs"
                       : "border-[#243026] bg-[#0C100D]/70 hover:border-[#7FBF6A]/40 shadow-xs"
                   }`}
                 >
@@ -463,7 +529,7 @@ export function CronSchedulersPanel({ theme = "dark" }: { theme?: "dark" | "ligh
                       type="button"
                       className={`flex items-center justify-center h-8 w-8 rounded-lg border transition-all cursor-pointer hover:text-[#E5735C] hover:border-[#E5735C]/40 hover:bg-[#E5735C]/10 active:scale-95 ${
                         isLight
-                          ? "border-[#D1D9D0] text-[#5E695E] bg-white"
+                          ? "border-[#D1D9D0] text-[#5E695E] bg-[#FAFBF9]"
                           : "border-[#243026] text-[#8B968B] bg-[#0C100D]"
                       }`}
                       title="Unregister BullMQ Repeatable Job"

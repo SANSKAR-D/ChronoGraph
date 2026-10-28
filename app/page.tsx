@@ -17,9 +17,48 @@ import { FluidCursorTrail } from "@/components/ui/fluid-cursor-trail";
 import { PullCord } from "@/components/kokonutui/pull-cord";
 import { LampCutoutSeparator } from "@/components/ui/lamp-cutout-separator";
 
+const VALID_TABS = ["home", "studio", "telemetry", "dlq", "architecture"];
+
 export default function ChronoGraphApp() {
   const [selectedTab, setSelectedTab] = useState<string>("home");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  // Restore active tab and theme on initial page load / refresh
+  React.useEffect(() => {
+    try {
+      const hash = window.location.hash.replace("#", "").toLowerCase();
+      if (VALID_TABS.includes(hash)) {
+        setSelectedTab(hash);
+      } else {
+        const savedTab = localStorage.getItem("chronograph_active_tab");
+        if (savedTab && VALID_TABS.includes(savedTab)) {
+          setSelectedTab(savedTab);
+        }
+      }
+
+      const savedTheme = localStorage.getItem("chronograph_theme");
+      if (savedTheme === "light" || savedTheme === "dark") {
+        setTheme(savedTheme);
+      }
+    } catch {}
+  }, []);
+
+  const handleTabChange = (key: string) => {
+    if (VALID_TABS.includes(key)) {
+      setSelectedTab(key);
+      try {
+        localStorage.setItem("chronograph_active_tab", key);
+        window.history.replaceState(null, "", key === "home" ? window.location.pathname : `#${key}`);
+      } catch {}
+    }
+  };
+
+  const handleThemeChange = (newTheme: "dark" | "light") => {
+    setTheme(newTheme);
+    try {
+      localStorage.setItem("chronograph_theme", newTheme);
+    } catch {}
+  };
 
   const handleLogin = () => {
     // Auth hook point
@@ -52,7 +91,7 @@ export default function ChronoGraphApp() {
           >
             <PullCord
               checked={theme === "light"}
-              onCheckedChange={(isLight) => setTheme(isLight ? "light" : "dark")}
+              onCheckedChange={(isLight) => handleThemeChange(isLight ? "light" : "dark")}
               label="Theme Switch"
             />
           </motion.div>
@@ -76,22 +115,22 @@ export default function ChronoGraphApp() {
 
       <Tabs
         selectedKey={selectedTab}
-        onSelectionChange={(key) => setSelectedTab(key as string)}
+        onSelectionChange={(key) => handleTabChange(key as string)}
         className="flex flex-col flex-1 h-full overflow-hidden relative"
       >
         {/* Floating Glassmorphism Navbar with Swipeable Tabs */}
         <Navbar
           onLogin={handleLogin}
-          onQuickRun={() => setSelectedTab("studio")}
+          onQuickRun={() => handleTabChange("studio")}
           theme={theme}
-          onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+          onToggleTheme={() => handleThemeChange(theme === "light" ? "dark" : "light")}
         />
 
         <main className="flex flex-1 overflow-hidden relative w-full h-full">
           <TabPanelCarousel className="h-full w-full">
             <TabPanel id="home" shouldForceMount className="h-full overflow-hidden">
               <HomeView
-                onSelectTab={(tab) => setSelectedTab(tab)}
+                onSelectTab={(tab) => handleTabChange(tab)}
                 onLogin={handleLogin}
               />
             </TabPanel>

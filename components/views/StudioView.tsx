@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Link2,
   Settings2,
+  Save,
 } from "lucide-react";
 import { validateDAG } from "@/lib/dag/cycle-detector";
 
@@ -122,95 +123,202 @@ export const CORE_NODE_TEMPLATES: NodeTemplate[] = [
   },
 ];
 
-const INITIAL_NODES: WorkflowNode[] = [
-  {
-    id: "wh_1",
-    name: "Webhook Trigger",
-    type: "webhook_trigger",
-    category: "trigger",
-    status: "idle",
-    detail: "POST /api/v1/orders/settle",
-    badge: "TRIGGER",
-    x: 100,
-    y: 200,
-    config: {
-      url: "/api/v1/hooks/orders_settle",
-      method: "POST",
-    },
-  },
-  {
-    id: "cron_1",
-    name: "Cron Trigger",
-    type: "cron_trigger",
-    category: "trigger",
-    status: "idle",
-    detail: "0 * * * * (Hourly Sync)",
-    badge: "CRON",
-    x: 100,
-    y: 380,
-    config: {
-      cronExpression: "0 * * * *",
-    },
-  },
-  {
-    id: "trans_1",
-    name: "Transform / Script",
-    type: "transform_script",
-    category: "action",
-    status: "idle",
-    detail: "payload.items.map(i => i.id)",
-    badge: "TRANSFORM",
-    x: 430,
-    y: 290,
-    config: {
-      script: "payload.items.map(i => i.id)",
-    },
-  },
-  {
-    id: "http_1",
-    name: "HTTP Request",
-    type: "http_request",
-    category: "action",
-    status: "idle",
-    detail: "POST https://api.stripe.com/v1",
-    badge: "HTTP ACTION",
-    x: 760,
-    y: 290,
-    config: {
-      url: "https://api.stripe.com/v1/charges",
-      method: "POST",
-      maxRetries: 3,
-      baseBackoffMs: 1000,
-      maxBackoffCapMs: 30000,
-    },
-  },
-  {
-    id: "delay_1",
-    name: "Delay Node",
-    type: "delay_timer",
-    category: "action",
-    status: "idle",
-    detail: "Sleep 5000ms // BullMQ ZSET",
-    badge: "DELAY",
-    x: 1090,
-    y: 290,
-    config: {
-      delayMs: 5000,
-    },
-  },
-];
+export interface DemoTemplate {
+  id: string;
+  name: string;
+  shortLabel: string;
+  badge: string;
+  description: string;
+  nodes: WorkflowNode[];
+  connections: Connection[];
+}
 
-const INITIAL_CONNECTIONS: Connection[] = [
-  { from: "wh_1", to: "trans_1" },
-  { from: "cron_1", to: "trans_1" },
-  { from: "trans_1", to: "http_1" },
-  { from: "http_1", to: "delay_1" },
+export const PRESEEDED_DEMO_TEMPLATES: DemoTemplate[] = [
+  {
+    id: "diamond",
+    name: "Diamond Payment Settlement DAG",
+    shortLabel: "Diamond Payment",
+    badge: "FAN-OUT / FAN-IN",
+    description: "Parallel fan-out & atomic fan-in DAG",
+    nodes: [
+      {
+        id: "node_webhook",
+        name: "Webhook Ingestion",
+        type: "webhook_trigger",
+        category: "trigger",
+        status: "idle",
+        detail: "POST /api/v1/hooks/orders_settle",
+        badge: "TRIGGER",
+        x: 80,
+        y: 220,
+        config: {
+          url: "/api/v1/hooks/orders_settle",
+          method: "POST",
+        },
+      },
+      {
+        id: "node_fraud",
+        name: "Fraud Risk Scoring",
+        type: "http_request",
+        category: "action",
+        status: "idle",
+        detail: "GET https://httpbin.org/get",
+        badge: "HTTP GET",
+        x: 440,
+        y: 110,
+        config: {
+          url: "https://httpbin.org/get",
+          method: "GET",
+        },
+      },
+      {
+        id: "node_inventory",
+        name: "Reserve Stock",
+        type: "transform_script",
+        category: "action",
+        status: "idle",
+        detail: "payload.items.map(i => i.sku)",
+        badge: "TRANSFORM",
+        x: 440,
+        y: 330,
+        config: {
+          script: "payload.items.map(i => i.sku)",
+        },
+      },
+      {
+        id: "node_stripe",
+        name: "Stripe Settlement",
+        type: "http_request",
+        category: "action",
+        status: "idle",
+        detail: "POST https://httpbin.org/post",
+        badge: "HTTP POST",
+        x: 800,
+        y: 220,
+        config: {
+          url: "https://httpbin.org/post",
+          method: "POST",
+          maxRetries: 3,
+          baseBackoffMs: 1000,
+          maxBackoffCapMs: 30000,
+        },
+      },
+    ],
+    connections: [
+      { from: "node_webhook", to: "node_fraud" },
+      { from: "node_webhook", to: "node_inventory" },
+      { from: "node_fraud", to: "node_stripe" },
+      { from: "node_inventory", to: "node_stripe" },
+    ],
+  },
+  {
+    id: "chaos",
+    name: "Chaos Flaky API Pipeline",
+    shortLabel: "Chaos Flaky",
+    badge: "EXPONENTIAL JITTER",
+    description: "Exponential backoff + jitter & DLQ replay",
+    nodes: [
+      {
+        id: "node_chaos_trigger",
+        name: "Webhook Ingestion",
+        type: "webhook_trigger",
+        category: "trigger",
+        status: "idle",
+        detail: "POST /api/v1/hooks/chaos_flaky",
+        badge: "TRIGGER",
+        x: 120,
+        y: 220,
+        config: {
+          url: "/api/v1/hooks/chaos_flaky",
+          method: "POST",
+        },
+      },
+      {
+        id: "node_flaky_http",
+        name: "Unreliable Gateway (503)",
+        type: "http_request",
+        category: "action",
+        status: "idle",
+        detail: "POST https://httpbin.org/status/503",
+        badge: "HTTP POST",
+        x: 480,
+        y: 220,
+        config: {
+          url: "https://httpbin.org/status/503",
+          method: "POST",
+          maxRetries: 3,
+          baseBackoffMs: 1000,
+          maxBackoffCapMs: 30000,
+        },
+      },
+    ],
+    connections: [
+      { from: "node_chaos_trigger", to: "node_flaky_http" },
+    ],
+  },
+  {
+    id: "cron",
+    name: "Cron Data Sync Pipeline",
+    shortLabel: "Cron Data Sync",
+    badge: "RECURRING CRON",
+    description: "Scheduled recurring pipeline & JSON transform",
+    nodes: [
+      {
+        id: "node_cron_trigger",
+        name: "Cron Trigger",
+        type: "cron_trigger",
+        category: "trigger",
+        status: "idle",
+        detail: "Every 5 mins (*/5 * * * *)",
+        badge: "CRON",
+        x: 100,
+        y: 220,
+        config: {
+          cronExpression: "*/5 * * * *",
+        },
+      },
+      {
+        id: "node_http_fetch",
+        name: "Fetch Market Tickers",
+        type: "http_request",
+        category: "action",
+        status: "idle",
+        detail: "GET https://httpbin.org/get",
+        badge: "HTTP GET",
+        x: 440,
+        y: 220,
+        config: {
+          url: "https://httpbin.org/get",
+          method: "GET",
+        },
+      },
+      {
+        id: "node_transform",
+        name: "Remap JSON Payload",
+        type: "transform_script",
+        category: "action",
+        status: "idle",
+        detail: "Safe path remap {{items}}",
+        badge: "TRANSFORM",
+        x: 780,
+        y: 220,
+        config: {
+          script: "payload.items.map(i => i.id)",
+        },
+      },
+    ],
+    connections: [
+      { from: "node_cron_trigger", to: "node_http_fetch" },
+      { from: "node_http_fetch", to: "node_transform" },
+    ],
+  },
 ];
 
 export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes] = useState<WorkflowNode[]>(INITIAL_NODES);
-  const [connections, setConnections] = useState<Connection[]>(INITIAL_CONNECTIONS);
+  const [activeTemplateId, setActiveTemplateId] = useState<string>("diamond");
+  const [nodes, setNodes] = useState<WorkflowNode[]>(PRESEEDED_DEMO_TEMPLATES[0].nodes);
+  const [connections, setConnections] = useState<Connection[]>(PRESEEDED_DEMO_TEMPLATES[0].connections);
   const [isRunning, setIsRunning] = useState(false);
   const [activeEdgeIndex, setActiveEdgeIndex] = useState<number>(-1);
 
@@ -251,6 +359,239 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     setTimeout(() => {
       setToastMessage(null);
     }, 2800);
+  };
+
+  const [workflowName, setWorkflowName] = useState<string>("Diamond Payment Settlement");
+  const [workflowDescription, setWorkflowDescription] = useState<string>("");
+  const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [savedWorkflows, setSavedWorkflows] = useState<
+    Array<{ id: string; name: string; description?: string | null; nodesJson: any; edgesJson: any }>
+  >([]);
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [workflowToDeleteId, setWorkflowToDeleteId] = useState<string>("");
+
+  const handleDeleteWorkflowById = async (idToDelete: string) => {
+    if (!idToDelete) return;
+    try {
+      setIsDeleting(true);
+      const res = await fetch(`/api/v1/workflows/${idToDelete}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Workflow deleted successfully!");
+        setShowDeleteModal(false);
+        fetchSavedWorkflows();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("chronograph:workflows-change"));
+        }
+        if (activeTemplateId === idToDelete) {
+          loadTemplate("diamond");
+        }
+      } else {
+        showToast(`Failed to delete: ${data.error || "Unknown error"}`);
+      }
+    } catch (err: any) {
+      showToast(`Delete failed: ${err.message || String(err)}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const fetchSavedWorkflows = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/workflows");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.workflows)) {
+        setSavedWorkflows(data.workflows);
+      }
+    } catch {}
+  }, []);
+
+  const hasRestoredTemplateRef = useRef(false);
+
+  useEffect(() => {
+    fetchSavedWorkflows();
+    const handleWfChange = () => fetchSavedWorkflows();
+    window.addEventListener("chronograph:workflows-change", handleWfChange);
+    return () => window.removeEventListener("chronograph:workflows-change", handleWfChange);
+  }, [fetchSavedWorkflows]);
+
+  // Restore active workflow on page reload
+  useEffect(() => {
+    if (hasRestoredTemplateRef.current) return;
+    try {
+      const savedTmplId = localStorage.getItem("chronograph_active_template");
+      if (savedTmplId) {
+        if (PRESEEDED_DEMO_TEMPLATES.some((t) => t.id === savedTmplId)) {
+          hasRestoredTemplateRef.current = true;
+          loadTemplate(savedTmplId);
+        } else if (savedWorkflows.length > 0) {
+          const match = savedWorkflows.find((w) => w.id === savedTmplId);
+          if (match) {
+            hasRestoredTemplateRef.current = true;
+            loadSavedWorkflow(match);
+          }
+        }
+      }
+    } catch {}
+  }, [savedWorkflows]);
+
+  const handleSaveWorkflow = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = workflowName.trim();
+    if (!trimmed) {
+      showToast("Please enter a workflow name");
+      return;
+    }
+    if (!dagValidation.isValid) {
+      showToast("Cannot save: DAG contains a cycle");
+      return;
+    }
+    if (nodes.length === 0) {
+      showToast("Cannot save: Canvas has no nodes");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const res = await fetch("/api/v1/workflows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmed,
+          description: workflowDescription.trim() || undefined,
+          nodes,
+          connections,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Workflow "${trimmed}" saved successfully!`);
+        setShowSaveModal(false);
+        fetchSavedWorkflows();
+        if (data.workflow?.id) {
+          setActiveTemplateId(data.workflow.id);
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("chronograph:workflows-change"));
+        }
+      } else {
+        showToast(`Failed to save: ${data.error || "Unknown error"}`);
+      }
+    } catch (err: any) {
+      showToast(`Save error: ${err.message || String(err)}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleNewWorkflow = () => {
+    setNodes([]);
+    setConnections([]);
+    setWorkflowName("Untitled Workflow");
+    setWorkflowDescription("");
+    setSelectedNodeId(null);
+    setActiveTemplateId("new_blank");
+    try {
+      localStorage.setItem("chronograph_active_template", "new_blank");
+    } catch {}
+    setIsRunning(false);
+    setActiveEdgeIndex(-1);
+    setIsDrawerOpen(true);
+    showToast("Created new workflow — select cards from the desk below");
+  };
+
+  const loadSavedWorkflow = (wf: any) => {
+    if (!wf) return;
+    setActiveTemplateId(wf.id);
+    try {
+      localStorage.setItem("chronograph_active_template", wf.id);
+    } catch {}
+    setWorkflowName(wf.name);
+    setWorkflowDescription(wf.description || "");
+
+    const loadedNodes: WorkflowNode[] = Array.isArray(wf.nodesJson)
+      ? wf.nodesJson.map((n: any, idx: number) => ({
+          id: n.id || `node_${idx}`,
+          name: n.name || "Node",
+          type: n.type?.toLowerCase() || "transform_script",
+          category: n.type?.includes("TRIGGER") || n.category === "trigger" ? "trigger" : "action",
+          status: "idle",
+          detail: n.detail || "",
+          badge: n.badge || "ACTION",
+          x: typeof n.x === "number" ? n.x : 100 + (idx % 3) * 320,
+          y: typeof n.y === "number" ? n.y : 150 + Math.floor(idx / 3) * 180,
+          config: n.config || (n.data ? { url: n.data.url, method: n.data.method, cronExpression: n.data.schedule } : undefined),
+        }))
+      : [];
+
+    const loadedConnections: Connection[] = Array.isArray(wf.edgesJson)
+      ? wf.edgesJson.map((e: any) => ({
+          from: e.source || e.from,
+          to: e.target || e.to,
+        }))
+      : [];
+
+    setNodes(loadedNodes);
+    setConnections(loadedConnections);
+    setSelectedNodeId(null);
+    setIsRunning(false);
+    setActiveEdgeIndex(-1);
+    showToast(`Loaded "${wf.name}"`);
+  };
+
+  // Load a pre-seeded ready-to-run demo template (T6.1)
+  const loadTemplate = (templateId: string) => {
+    const tmpl = PRESEEDED_DEMO_TEMPLATES.find((t) => t.id === templateId);
+    if (!tmpl) return;
+    setActiveTemplateId(templateId);
+    try {
+      localStorage.setItem("chronograph_active_template", templateId);
+    } catch {}
+    setWorkflowName(tmpl.name);
+    setWorkflowDescription(tmpl.description || "");
+    setNodes(tmpl.nodes.map((n) => ({ ...n, status: "idle" })));
+    setConnections(tmpl.connections);
+    setSelectedNodeId(null);
+    setIsRunning(false);
+    setActiveEdgeIndex(-1);
+    showToast(`Loaded "${tmpl.name}"`);
+  };
+
+  const [confirmDeleteWf, setConfirmDeleteWf] = useState(false);
+  const isSavedWorkflow = savedWorkflows.some((w) => w.id === activeTemplateId);
+
+  const handleDeleteActiveWorkflow = async () => {
+    if (!isSavedWorkflow) return;
+    if (!confirmDeleteWf) {
+      setConfirmDeleteWf(true);
+      setTimeout(() => setConfirmDeleteWf(false), 4000);
+      return;
+    }
+    setConfirmDeleteWf(false);
+
+    try {
+      const res = await fetch(`/api/v1/workflows/${activeTemplateId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Deleted workflow "${workflowName}"`);
+        fetchSavedWorkflows();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("chronograph:workflows-change"));
+        }
+        loadTemplate("diamond");
+      } else {
+        showToast(`Failed to delete: ${data.error || "Unknown error"}`);
+      }
+    } catch (err: any) {
+      showToast(`Delete failed: ${err.message || String(err)}`);
+    }
   };
 
   // Add Card to Canvas from Desk via click
@@ -495,18 +836,27 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     let runId: string | null = null;
     try {
       const webhookNode = nodes.find((n) => n.type === "webhook_trigger");
-      const endpoint = webhookNode?.config?.url || "/api/v1/hooks/orders_settle";
+      const cronNode = nodes.find((n) => n.type === "cron_trigger");
+      const endpoint = webhookNode?.config?.url || (cronNode ? "/api/v1/cron/trigger-now" : "/api/v1/hooks/orders_settle");
+      const secret = endpoint.includes("chaos_flaky")
+        ? "chronograph_chaos_secret_2026"
+        : endpoint.includes("cron")
+        ? "chronograph_cron_sync_secret_2026"
+        : "chronograph_webhook_secret_2026";
+      const payload = cronNode && !webhookNode
+        ? { workflowId: "cron_data_sync" }
+        : {
+            source: "chronograph_studio",
+            timestamp: new Date().toISOString(),
+            nodesCount: nodes.length,
+          };
       const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-webhook-secret": "chronograph_webhook_secret_2026",
+          "x-webhook-secret": secret,
         },
-        body: JSON.stringify({
-          source: "chronograph_studio",
-          timestamp: new Date().toISOString(),
-          nodesCount: nodes.length,
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const data = await res.json();
@@ -794,22 +1144,22 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
               } ${
                 isSelected
                   ? isLight
-                    ? "border-[#7FBF6A] bg-[#FFFFFF] shadow-[0_0_24px_rgba(127,191,106,0.35)] ring-2 ring-[#7FBF6A]"
+                    ? "border-[#7FBF6A] bg-[#FAFBF9] shadow-[0_0_24px_rgba(127,191,106,0.35)] ring-2 ring-[#7FBF6A]"
                     : "border-[#7FBF6A] bg-[#141A15] shadow-[0_0_24px_rgba(127,191,106,0.35)] ring-2 ring-[#7FBF6A]"
                   : isNodeRunning
                     ? isLight
-                      ? "border-[#7FBF6A] bg-[#FFFFFF] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
+                      ? "border-[#7FBF6A] bg-[#FAFBF9] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
                       : "border-[#7FBF6A] bg-[#141A15] shadow-[0_0_30px_rgba(127,191,106,0.35)] ring-1 ring-[#7FBF6A]"
                     : isNodeSuccess
                       ? isLight
-                        ? "border-[#7FBF6A]/50 bg-[#FFFFFF] shadow-[0_4px_20px_rgba(127,191,106,0.15)]"
+                        ? "border-[#7FBF6A]/50 bg-[#FAFBF9] shadow-[0_4px_20px_rgba(127,191,106,0.15)]"
                         : "border-[#7FBF6A]/50 bg-[#141A15] shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
                       : isWiringSource
                         ? isLight
                           ? "border-cyan-600 bg-cyan-50 shadow-[0_0_24px_rgba(6,182,212,0.3)] ring-2 ring-cyan-500/50"
                           : "border-cyan-400 bg-[#101718] shadow-[0_0_24px_rgba(56,189,248,0.3)] ring-2 ring-cyan-400/50"
                         : isLight
-                          ? "border-[#E2E6E3] bg-[#FFFFFF]/98 hover:border-[#7FBF6A]/50 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.05),0_8px_10px_-6px_rgba(0,0,0,0.01)]"
+                          ? "border-[#E2E6E3] bg-[#FAFBF9] hover:border-[#7FBF6A]/50 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.05),0_8px_10px_-6px_rgba(0,0,0,0.01)]"
                           : "border-[#243026] bg-[#141A15]/95 hover:border-[#7FBF6A]/40 shadow-xl"
               }`}
               style={{
@@ -936,14 +1286,58 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         })}
       </div>
 
-      {/* ── Top Left: Execute & Reset Workflow Toolbar (In place of Dormammu Engine Canvas) ── */}
+      {/* ── Top Left: Execute & Reset Workflow Toolbar ── */}
       <div
-        className={`canvas-control pointer-events-auto absolute top-18 sm:top-24 left-3 sm:left-6 z-40 flex items-center gap-1.5 sm:gap-2 rounded-xl border p-1 sm:p-1.5 backdrop-blur-md ${
+        className={`canvas-control pointer-events-auto absolute top-18 sm:top-24 left-3 sm:left-6 z-40 flex flex-wrap items-center gap-1.5 sm:gap-2 rounded-xl border p-1 sm:p-1.5 backdrop-blur-md ${
           isLight
             ? "border-[#E2E6E3] bg-[#FAFAF9]/95 shadow-[0_10px_30px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,1)]"
             : "border-[#243026] bg-[#141A15]/90 shadow-2xl"
         }`}
       >
+        <button
+          onClick={handleNewWorkflow}
+          type="button"
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 sm:px-3 py-1.5 text-xs font-mono font-medium transition-colors cursor-pointer select-none active:scale-95 ${
+            isLight
+              ? "border-[#E2E6E3] bg-[#F0F2F0] text-[#667268] hover:text-[#111814] hover:border-[#7FBF6A]/50"
+              : "border-[#243026] bg-[#0C100D] text-[#8B968B] hover:text-[#E8ECE4] hover:border-[#7FBF6A]/40"
+          }`}
+          title="Create New Blank Workflow"
+        >
+          <Plus className="h-3.5 w-3.5 text-[#7FBF6A]" />
+          <span>New</span>
+        </button>
+
+        <button
+          onClick={() => setShowSaveModal(true)}
+          type="button"
+          className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A]/50 bg-[#7FBF6A]/15 hover:bg-[#7FBF6A]/25 text-[#7FBF6A] px-2.5 sm:px-3 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95"
+          title="Save Workflow Blueprint with Name"
+        >
+          <Save className="h-3.5 w-3.5" />
+          <span>Save</span>
+        </button>
+
+        <button
+          onClick={() => {
+            if (savedWorkflows.length === 0) {
+              showToast("No saved workflows found in database to delete.");
+              return;
+            }
+            const currentMatch = savedWorkflows.find((w) => w.id === activeTemplateId);
+            setWorkflowToDeleteId(currentMatch ? currentMatch.id : savedWorkflows[0]?.id || "");
+            setShowDeleteModal(true);
+          }}
+          type="button"
+          className="flex items-center gap-1.5 rounded-lg border border-[#E5735C]/40 bg-[#E5735C]/10 hover:bg-[#E5735C]/20 text-[#E5735C] px-2.5 sm:px-3 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95"
+          title="Delete a workflow from database"
+        >
+          <Trash2 className="h-3.5 w-3.5 text-[#E5735C]" />
+          <span>Delete</span>
+        </button>
+
+        <div className={`h-4 w-px mx-0.5 ${isLight ? "bg-[#E2E6E3]" : "bg-[#243026]"}`} />
+
         <button
           onClick={resetWorkflow}
           type="button"
@@ -960,7 +1354,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
 
         <button
           onClick={runWorkflow}
-          disabled={isRunning || !dagValidation.isValid}
+          disabled={isRunning || !dagValidation.isValid || nodes.length === 0}
           type="button"
           className="flex items-center gap-1.5 rounded-lg border border-[#7FBF6A] bg-[#7FBF6A] hover:bg-[#92CF7D] text-[#0C100D] shadow-[0_0_15px_rgba(127,191,106,0.3)] px-3 sm:px-4 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer select-none active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
           title="Simulate DAG Execution"
@@ -969,6 +1363,67 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           <span>{isRunning ? "Executing..." : "Execute"}</span>
           <span className="hidden sm:inline">{isRunning ? "" : " Workflow"}</span>
         </button>
+
+        <div className={`h-4 w-px mx-0.5 ${isLight ? "bg-[#E2E6E3]" : "bg-[#243026]"}`} />
+
+        {/* Workflow Switcher Dropdown (Demo Templates + Saved Workflows) */}
+        <select
+          value={activeTemplateId}
+          onChange={(e) => {
+            const val = e.target.value;
+            const demo = PRESEEDED_DEMO_TEMPLATES.find((t) => t.id === val);
+            if (demo) {
+              loadTemplate(val);
+            } else {
+              const saved = savedWorkflows.find((w) => w.id === val);
+              if (saved) loadSavedWorkflow(saved);
+            }
+          }}
+          className={`rounded-lg border px-2 py-1 text-[11px] font-mono cursor-pointer transition-colors focus:outline-none focus:border-[#7FBF6A] ${
+            isLight
+              ? "border-[#E2E6E3] bg-[#FAFBF9] text-[#111814]"
+              : "border-[#243026] bg-[#0C100D] text-[#E8ECE4]"
+          }`}
+          title="Select Active Workflow or Template"
+        >
+          <optgroup label="Demo Templates">
+            {PRESEEDED_DEMO_TEMPLATES.map((tmpl) => (
+              <option key={tmpl.id} value={tmpl.id}>
+                {tmpl.shortLabel}
+              </option>
+            ))}
+          </optgroup>
+          {savedWorkflows.length > 0 && (
+            <optgroup label="Saved Workflows">
+              {savedWorkflows.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {activeTemplateId === "new_blank" && (
+            <option value="new_blank">★ New Blank Workflow</option>
+          )}
+        </select>
+
+        {isSavedWorkflow && (
+          <button
+            onClick={handleDeleteActiveWorkflow}
+            type="button"
+            className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-mono transition-all cursor-pointer ${
+              confirmDeleteWf
+                ? "border-[#E5735C] bg-[#E5735C] text-[#0C100D] font-bold shadow-md shadow-[#E5735C]/30 animate-pulse"
+                : isLight
+                ? "border-[#E5735C]/30 bg-[#FAFBF9] text-[#E5735C] hover:bg-[#E5735C]/10"
+                : "border-[#E5735C]/30 bg-[#0C100D] text-[#E5735C] hover:bg-[#E5735C]/10"
+            }`}
+            title="Delete this workflow from database"
+          >
+            <Trash2 className="h-3 w-3" />
+            <span>{confirmDeleteWf ? "Confirm Delete?" : "Delete"}</span>
+          </button>
+        )}
       </div>
 
       {/* ── Bottom Right: Zoom & Center Controls ── */}
@@ -1150,7 +1605,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
                 onClick={() => addNodeToCanvas(tmpl)}
                 className={`group relative flex flex-col justify-between rounded-2xl border p-3.5 transition-all duration-150 cursor-grab active:cursor-grabbing active:scale-95 ${
                   isLight
-                    ? "border-[#E2E6E3] bg-[#FFFFFF]/90 hover:border-[#7FBF6A] hover:bg-[#FFFFFF] shadow-sm hover:shadow-md"
+                    ? "border-[#E2E6E3] bg-[#FAFBF9] hover:border-[#7FBF6A] hover:bg-[#F3F6F2] shadow-sm hover:shadow-md"
                     : "border-[#243026] bg-[#141A15]/95 hover:border-[#7FBF6A] hover:bg-[#1A221C] shadow-lg hover:shadow-[0_8px_25px_rgba(0,0,0,0.6)]"
                 }`}
               >
@@ -1212,7 +1667,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         <div
           className={`canvas-control pointer-events-auto fixed top-18 sm:top-20 right-3 sm:right-6 z-50 w-[calc(100vw-1.5rem)] sm:w-[420px] max-w-[420px] max-h-[calc(100vh-90px)] sm:max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl sm:rounded-3xl border p-4 sm:p-5 shadow-2xl backdrop-blur-2xl ring-1 ring-[#7FBF6A]/30 animate-in fade-in slide-in-from-right-4 duration-150 ${
             isLight
-              ? "border-[#E2E6E3] bg-[#FFFFFF]/98 text-[#111814] shadow-[0_20px_50px_rgba(0,0,0,0.15)]"
+              ? "border-[#E2E6E3] bg-[#FAFBF9] text-[#111814] shadow-[0_20px_50px_rgba(0,0,0,0.15)]"
               : "border-[#243026] bg-[#141A15]/98 text-[#E8ECE4] shadow-[0_25px_60px_rgba(0,0,0,0.9)]"
           }`}
           style={{
@@ -1430,6 +1885,217 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
                 />
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* ── Save Workflow Modal ── */}
+      {showSaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+          <div
+            className={`w-full max-w-md rounded-2xl border p-5 sm:p-6 shadow-2xl transition-all ${
+              isLight
+                ? "border-[#D1D9D0] bg-[#FAFBF9] text-[#141A15]"
+                : "border-[#243026] bg-[#141A15] text-[#E8ECE4]"
+            }`}
+          >
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-inherit">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#7FBF6A]/15 text-[#7FBF6A] border border-[#7FBF6A]/30">
+                  <Save className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Save Workflow Blueprint</h3>
+                  <p className={`text-[11px] font-mono ${isLight ? "text-[#5E695E]" : "text-[#8B968B]"}`}>
+                    Persist topology to PostgreSQL & BullMQ
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSaveModal(false)}
+                type="button"
+                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                  isLight
+                    ? "border-[#E2E6E3] hover:bg-[#F0F2F0] text-[#667268]"
+                    : "border-[#243026] hover:bg-[#0C100D] text-[#8B968B]"
+                }`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveWorkflow} className="space-y-4">
+              <div>
+                <label className={`block text-[11px] font-mono mb-1 ${isLight ? "text-[#5E695E]" : "text-[#8B968B]"}`}>
+                  Workflow Name <span className="text-[#7FBF6A]">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={workflowName}
+                  onChange={(e) => setWorkflowName(e.target.value)}
+                  placeholder="e.g. Diamond Settlement Pipeline"
+                  className={`w-full rounded-xl border px-3.5 py-2 text-xs font-mono focus:outline-none focus:border-[#7FBF6A] ${
+                    isLight
+                      ? "border-[#D1D9D0] bg-[#F8FAF7] text-[#141A15]"
+                      : "border-[#243026] bg-[#0C100D] text-[#E8ECE4]"
+                  }`}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className={`block text-[11px] font-mono mb-1 ${isLight ? "text-[#5E695E]" : "text-[#8B968B]"}`}>
+                  Description (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={workflowDescription}
+                  onChange={(e) => setWorkflowDescription(e.target.value)}
+                  placeholder="Brief summary of workflow objective..."
+                  className={`w-full rounded-xl border px-3.5 py-2 text-xs font-mono focus:outline-none focus:border-[#7FBF6A] ${
+                    isLight
+                      ? "border-[#D1D9D0] bg-[#F8FAF7] text-[#141A15]"
+                      : "border-[#243026] bg-[#0C100D] text-[#E8ECE4]"
+                  }`}
+                />
+              </div>
+
+              {/* Topology Summary */}
+              <div
+                className={`p-3 rounded-xl border text-xs font-mono flex items-center justify-between ${
+                  dagValidation.isValid
+                    ? isLight
+                      ? "border-[#7FBF6A]/30 bg-[#7FBF6A]/10 text-[#2E6B1D]"
+                      : "border-[#7FBF6A]/30 bg-[#7FBF6A]/10 text-[#7FBF6A]"
+                    : "border-red-500/30 bg-red-500/10 text-red-400"
+                }`}
+              >
+                <span>{nodes.length} Nodes • {connections.length} Connections</span>
+                <span className="font-bold">
+                  {dagValidation.isValid ? "✓ Valid DAG" : "⚠ Cycle Detected"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSaveModal(false)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-mono border transition-colors cursor-pointer ${
+                    isLight
+                      ? "border-[#D1D9D0] hover:bg-[#F0F2F0] text-[#5E695E]"
+                      : "border-[#243026] hover:bg-[#0C100D] text-[#8B968B]"
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving || !dagValidation.isValid || nodes.length === 0}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-mono font-bold bg-[#7FBF6A] hover:bg-[#92CF7D] text-[#0C100D] transition-all cursor-pointer shadow-md shadow-[#7FBF6A]/20 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Save className={`h-3.5 w-3.5 ${isSaving ? "animate-spin" : ""}`} />
+                  <span>{isSaving ? "Saving..." : "Save Workflow"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* ── Delete Workflow Modal ── */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+          <div
+            className={`w-full max-w-md rounded-2xl border p-5 sm:p-6 shadow-2xl transition-all ${
+              isLight
+                ? "border-[#D1D9D0] bg-[#FAFBF9] text-[#141A15]"
+                : "border-[#243026] bg-[#141A15] text-[#E8ECE4]"
+            }`}
+          >
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-inherit">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#E5735C]/15 text-[#E5735C] border border-[#E5735C]/30">
+                  <Trash2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Delete Workflow Blueprint</h3>
+                  <p className={`text-[11px] font-mono ${isLight ? "text-[#5E695E]" : "text-[#8B968B]"}`}>
+                    Cascade delete from PostgreSQL & BullMQ
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                type="button"
+                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                  isLight
+                    ? "border-[#E2E6E3] hover:bg-[#F0F2F0] text-[#667268]"
+                    : "border-[#243026] hover:bg-[#0C100D] text-[#8B968B]"
+                }`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className={`block text-[11px] font-mono mb-1.5 ${isLight ? "text-[#5E695E]" : "text-[#8B968B]"}`}>
+                  Select Workflow to Delete
+                </label>
+                <select
+                  value={workflowToDeleteId}
+                  onChange={(e) => setWorkflowToDeleteId(e.target.value)}
+                  className={`w-full rounded-xl border px-3.5 py-2 text-xs font-mono focus:outline-none focus:border-[#E5735C] ${
+                    isLight
+                      ? "border-[#D1D9D0] bg-[#F8FAF7] text-[#141A15]"
+                      : "border-[#243026] bg-[#0C100D] text-[#E8ECE4]"
+                  }`}
+                >
+                  {savedWorkflows.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Warning Notice */}
+              <div
+                className={`p-3 rounded-xl border text-xs font-mono leading-relaxed ${
+                  isLight
+                    ? "border-[#E5735C]/30 bg-[#E5735C]/10 text-[#9C3823]"
+                    : "border-[#E5735C]/30 bg-[#E5735C]/10 text-[#E5735C]"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-bold mb-1">
+                  <AlertTriangle className="h-3.5 w-3.5 text-[#E5735C]" />
+                  <span>Permanent Action</span>
+                </div>
+                Deleting this workflow blueprint will unregister any active BullMQ repeatable cron schedulers and permanently delete all associated execution runs and logs.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-mono border transition-colors cursor-pointer ${
+                    isLight
+                      ? "border-[#D1D9D0] hover:bg-[#F0F2F0] text-[#5E695E]"
+                      : "border-[#243026] hover:bg-[#0C100D] text-[#8B968B]"
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteWorkflowById(workflowToDeleteId)}
+                  disabled={isDeleting || !workflowToDeleteId}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-mono font-bold bg-[#E5735C] hover:bg-[#d6654e] text-[#0C100D] transition-all cursor-pointer shadow-md shadow-[#E5735C]/25 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed border border-[#E5735C]"
+                >
+                  <Trash2 className={`h-3.5 w-3.5 ${isDeleting ? "animate-spin" : ""}`} />
+                  <span>{isDeleting ? "Deleting..." : "Confirm Delete"}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
