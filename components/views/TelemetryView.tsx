@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Activity, Server, RefreshCw, Radio } from "lucide-react";
 import { CronSchedulersPanel } from "@/components/telemetry/CronSchedulersPanel";
+import { getSocket } from "@/lib/socket/client";
 
 interface WorkerNode {
   id: string;
@@ -101,48 +102,79 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
   useEffect(() => {
     if (!streamActive) return;
     let es: EventSource | null = null;
+    let socket: any = null;
+
+    const processParsedEvent = (parsed: any) => {
+      if (!parsed) return;
+      if (parsed.status === "connected" && !parsed.event) return;
+      if (parsed.event === "AUTOSCALER_UPDATE") {
+        setAutoscaler(parsed);
+        return;
+      }
+      const eventName = parsed.event || (parsed.nodeId ? `EXEC:${parsed.nodeId}` : "EVENT");
+      const status = parsed.status || (eventName.includes("FAIL") ? "FAILED" : "SUCCESS");
+      const latency = parsed.latency ?? (parsed.durationMs ? Math.round(parsed.durationMs) : 12);
+      const time = parsed.timestamp
+        ? new Date(parsed.timestamp).toLocaleTimeString()
+        : new Date().toLocaleTimeString();
+
+      setEvents((prev) => [
+        {
+          id: parsed.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          time,
+          event: eventName,
+          status,
+          latency,
+        },
+        ...prev.slice(0, 49),
+      ]);
+    };
+
+    const handleEventDataStr = (dataStr: string) => {
+      try {
+        processParsedEvent(JSON.parse(dataStr));
+      } catch {
+        // ignore non-json keepalive
+      }
+    };
+
+    // 1. Primary: WebSocket (Socket.IO)
+    try {
+      socket = getSocket({ channel: "cluster" });
+      if (socket) {
+        socket.on("cluster:event", processParsedEvent);
+        socket.on("WORKFLOW_TRIGGERED", processParsedEvent);
+        socket.on("NODE_STATE_CHANGE", processParsedEvent);
+        socket.on("JOB_COMPLETED", processParsedEvent);
+        socket.on("AUTOSCALER_UPDATE", processParsedEvent);
+        socket.on("message", (msg: any) => {
+          if (typeof msg === "string") handleEventDataStr(msg);
+          else processParsedEvent(msg);
+        });
+      }
+    } catch {
+      // socket connection error
+    }
+
+    // 2. Fallback: SSE connection
     try {
       es = new EventSource("/api/v1/cluster/events");
-
-      const handleEvent = (dataStr: string) => {
-        try {
-          const parsed = JSON.parse(dataStr);
-          if (parsed.status === "connected" && !parsed.event) return;
-          if (parsed.event === "AUTOSCALER_UPDATE") {
-            setAutoscaler(parsed);
-            return;
-          }
-          const eventName = parsed.event || (parsed.nodeId ? `EXEC:${parsed.nodeId}` : "EVENT");
-          const status = parsed.status || (eventName.includes("FAIL") ? "FAILED" : "SUCCESS");
-          const latency = parsed.latency ?? (parsed.durationMs ? Math.round(parsed.durationMs) : 12);
-          const time = parsed.timestamp
-            ? new Date(parsed.timestamp).toLocaleTimeString()
-            : new Date().toLocaleTimeString();
-
-          setEvents((prev) => [
-            {
-              id: parsed.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              time,
-              event: eventName,
-              status,
-              latency,
-            },
-            ...prev.slice(0, 49),
-          ]);
-        } catch {
-          // ignore non-json keepalive
-        }
-      };
-
-      es.onmessage = (e) => handleEvent(e.data);
-      es.addEventListener("WORKFLOW_TRIGGERED", (e: any) => handleEvent(e.data));
-      es.addEventListener("NODE_STATE_CHANGE", (e: any) => handleEvent(e.data));
-      es.addEventListener("JOB_COMPLETED", (e: any) => handleEvent(e.data));
+      es.onmessage = (e) => handleEventDataStr(e.data);
+      es.addEventListener("WORKFLOW_TRIGGERED", (e: any) => handleEventDataStr(e.data));
+      es.addEventListener("NODE_STATE_CHANGE", (e: any) => handleEventDataStr(e.data));
+      es.addEventListener("JOB_COMPLETED", (e: any) => handleEventDataStr(e.data));
     } catch {
       // EventSource failed to instantiate
     }
 
     return () => {
+      if (socket) {
+        socket.off("cluster:event", processParsedEvent);
+        socket.off("WORKFLOW_TRIGGERED", processParsedEvent);
+        socket.off("NODE_STATE_CHANGE", processParsedEvent);
+        socket.off("JOB_COMPLETED", processParsedEvent);
+        socket.off("AUTOSCALER_UPDATE", processParsedEvent);
+      }
       if (es) {
         es.close();
       }
