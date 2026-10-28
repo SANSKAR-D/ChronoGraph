@@ -1,9 +1,9 @@
 # ChronoGraph ⚡
 
 > **High-Throughput, Distributed Topological Workflow Orchestrator & Live Telemetry Engine**  
-> *Engineered with Next.js 15 (App Router), BullMQ, Redis 7 (Lua Scripting), PostgreSQL 16 (Prisma ORM), and React Flow.*
+> *Engineered with Next.js 16 (Turbopack & App Router), BullMQ, Redis 7 (Lua Scripting), PostgreSQL 16 (Prisma ORM), and React Flow.*
 
-[![Next.js 15](https://img.shields.io/badge/Next.js-15.x-black?logo=next.js)](https://nextjs.org/)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16.x-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![BullMQ](https://img.shields.io/badge/BullMQ-6.x-red?logo=redis)](https://bullmq.io/)
 [![Redis](https://img.shields.io/badge/Redis-7--alpine-critical?logo=redis)](https://redis.io/)
@@ -28,12 +28,16 @@
   - [Step 4: Launch Distributed Workers / Autoscaler](#step-4-launch-distributed-workers--autoscaler)
 - [Pre-Seeded Showcase Workflows](#-pre-seeded-showcase-workflows)
 - [Feature Showcase & Interface Guide](#-feature-showcase--interface-guide)
+  - [Passwordless OTP Authentication & Protected Workspaces](#passwordless-otp-authentication--protected-workspaces)
   - [React Flow Studio Canvas & Workflow Management](#react-flow-studio-canvas--workflow-management)
   - [Real-Time SSE Telemetry & Health Stream](#real-time-sse-telemetry--health-stream)
   - [Celery-Style Worker Autoscaler](#celery-style-worker-autoscaler)
   - [Dead-Letter Queue (DLQ) & Fault Recovery](#dead-letter-queue-dlq--fault-recovery)
   - [BullMQ Repeatable Cron Job Scheduler](#bullmq-repeatable-cron-job-scheduler)
   - [Dual Theme System (Instrument Dark & Soothing Off-White)](#dual-theme-system)
+- [Production & Cloud Deployment Guide](#-production--cloud-deployment-guide)
+  - [1. Single-Container Docker (Render / Koyeb / VPS)](#1-single-container-docker-render--koyeb--vps)
+  - [2. Hybrid Serverless (Vercel Frontend + Render Worker)](#2-hybrid-serverless-vercel-frontend--render-worker)
 - [API Reference](#-api-reference)
 - [Load Testing & Benchmark Results](#-load-testing--benchmark-results)
 - [Full Tool & Dependency Disclosures](#-full-tool--dependency-disclosures)
@@ -51,6 +55,7 @@
 4. **Full Jitter Resilience & Dead-Letter Queue (DLQ)**: Retries avoid the thundering herd problem using mathematically randomized exponential backoff. Failed jobs that exhaust retries are isolated in DLQ with complete diagnostic snapshots, one-click replay, and purge capabilities.
 5. **Zero-Polling SSE Telemetry**: Worker state transitions (`RUNNING`, `RETRYING`, `SUCCESS`, `DLQ`) publish to Redis Pub/Sub channels piped directly to browser `EventSource` streams.
 6. **Celery-Style Dynamic Autoscaling**: Automatically scales background worker child processes up and down based on real-time queue backlog with warm-down dampening.
+7. **Passwordless Email OTP Authentication**: Secure, one-time verification codes dispatched via SMTP, stored in Redis with 5-minute TTL, and signed into cryptographically verifiable HMAC-SHA256 session cookies. Studio, Telemetry, and DLQ tabs are strictly route-protected.
 
 ---
 
@@ -207,6 +212,13 @@ docker compose ps
 DATABASE_URL="postgresql://postgres:postgrespassword@localhost:5432/chronograph?schema=public"
 REDIS_URL="redis://localhost:6379"
 WEBHOOK_SECRET="chronograph_secret_development_key_2026"
+
+# SMTP Email Authentication (In dev mode, OTPs log to server console if unconfigured)
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT="587"
+SMTP_USER="your-email@gmail.com"
+SMTP_PASS="your-app-password"
+SMTP_FROM="ChronoGraph <noreply@chronograph.dev>"
 ```
 
 2. Push the Prisma schema and seed demo workflows:
@@ -261,6 +273,14 @@ ChronoGraph comes with 3 pre-seeded demonstration blueprints:
 
 ## 🎨 Feature Showcase & Interface Guide
 
+### Passwordless OTP Authentication & Protected Workspaces
+
+- **One-Time Password (OTP) Email Dispatch**: Built with `nodemailer` to dispatch high-security 6-digit verification codes.
+- **Single-Use Redis Consumption**: Codes expire in 300 seconds (5 minutes) and are destroyed immediately upon successful verification to prevent replay attacks.
+- **HMAC-SHA256 Signed Session Cookies**: Secure, `HttpOnly` authenticated sessions with automatic user context tracking.
+- **Route & Tab Protection**: The Studio, DLQ, and Telemetry workspaces require authentication; unauthenticated visits automatically prompt login and protect cluster operations.
+- **Live User Profile**: Navbar displays a personalized user avatar with one-click logout.
+
 ### React Flow Studio Canvas & Workflow Management
 
 - **Interactive Node Palette**: Drag-and-drop triggers, HTTP requests, data transformations, and non-blocking BullMQ delay nodes.
@@ -312,10 +332,47 @@ ChronoGraph comes with 3 pre-seeded demonstration blueprints:
 
 ---
 
+## ☁️ Production & Cloud Deployment Guide
+
+ChronoGraph supports two cloud deployment architectures depending on your hosting provider.
+
+### 1. Single-Container Docker (Render / Koyeb / VPS)
+Runs Next.js, APIs, and the background DAG execution worker in a single self-contained container:
+
+1. **Deploy with Dockerfile**:
+   ChronoGraph includes a multi-stage, production-optimized [`Dockerfile`](Dockerfile) with automated database migration on startup:
+   ```bash
+   docker build -t chronograph-app .
+   docker run -p 3000:3000 \
+     -e DATABASE_URL="<your-neon-or-postgres-url>" \
+     -e REDIS_URL="<your-redis-url>" \
+     -e WEBHOOK_SECRET="<your-strong-secret>" \
+     chronograph-app
+   ```
+2. **One-Click on Render**:
+   - Create a **New Web Service** connected to your GitHub repository.
+   - Select **Docker** environment and **Free** tier.
+   - Supply `DATABASE_URL` (Neon) and `REDIS_URL` (Redis Cloud).
+   - On boot, the embedded worker in `instrumentation.ts` automatically executes DAG queue jobs!
+
+### 2. Hybrid Serverless (Vercel Frontend + Render Worker)
+- **Vercel**: Deploy the repository directly to Vercel (Next.js preset). Add your Neon `DATABASE_URL` and `REDIS_URL`. Vercel serves the UI studio, API routes, and webhook ingestion (< 15ms).
+- **Background Worker**: On Render (or any free container service), create a web service with start command:
+  ```bash
+  npm run worker:autoscale
+  ```
+  The worker connects to the same cloud Redis and executes DAG nodes in the background.
+
+---
+
 ## 📡 API Reference
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
+| `POST` | `/api/v1/auth/send-otp` | Generates 6-digit OTP and sends email via SMTP. |
+| `POST` | `/api/v1/auth/verify-otp` | Verifies OTP against Redis and establishes signed session cookie. |
+| `GET` | `/api/v1/auth/me` | Returns the currently authenticated user session. |
+| `POST` | `/api/v1/auth/logout` | Clears authenticated session cookie. |
 | `POST` | `/api/v1/hooks/[webhookId]` | Triggers workflow run via webhook. Verifies HMAC header and returns `202 Accepted` in $< 25\text{ ms}$. |
 | `GET` | `/api/v1/workflows` | Lists all workflow blueprints. |
 | `POST` | `/api/v1/workflows` | Creates or saves a new workflow blueprint. |
@@ -372,6 +429,7 @@ In compliance with open-source attribution standards, the following libraries an
 | **`ioredis`** | `^6.0.0` | High-performance Redis client used for atomic Lua fan-in scripts, in-degree decrementing, and Pub/Sub streams. |
 | **`PostgreSQL 16`** | `16-alpine` | ACID-compliant relational persistence for workflow blueprints, execution histories, node step logs, and DLQ records. |
 | **`@prisma/client` & `prisma`** | `^6.19.3` | Type-safe ORM schema definitions, automated migrations, and relational cascading relations. |
+| **`nodemailer`** | `^10.2.1` | SMTP transport client for secure passwordless email OTP delivery. |
 | **`Next.js`** | `16.4.2` | Fullstack React serverless runtime providing App Router API routes, Server-Sent Events, and SSR client layouts. |
 | **`Tailwind CSS`** | `^4.x` | Modern styling engine with tailored dark and soft off-white design tokens. |
 | **`vitest`** | `^5.0.5` | Fast unit and integration test runner validating cycle detection, Lua fan-in logic, and API endpoints. |
@@ -384,6 +442,7 @@ In compliance with open-source attribution standards, the following libraries an
 my-app/
 ├── app/
 │   ├── api/v1/
+│   │   ├── auth/                    # OTP send, verify, session, & logout
 │   │   ├── cluster/
 │   │   │   ├── events/route.ts      # SSE stream for cluster-wide events
 │   │   │   └── health/route.ts      # Worker heartbeats & queue statistics
@@ -392,13 +451,14 @@ my-app/
 │   │   ├── hooks/[webhookId]/       # Webhook ingestion (< 25ms SLA)
 │   │   ├── runs/[runId]/stream/     # Per-run SSE telemetry stream
 │   │   └── workflows/               # Workflow CRUD & cascade delete
+│   ├── login/page.tsx               # Passwordless email OTP login page
 │   ├── globals.css                  # Theme CSS variables & font definitions
 │   ├── layout.tsx                   # Root HTML layout with theme wrapper
-│   └── page.tsx                     # Main application view manager
+│   └── page.tsx                     # Main application view manager & protected tabs
 ├── components/
 │   ├── canvas/                      # React Flow custom nodes & execution drawer
 │   ├── hero/                        # 3D spatial landing page & tilt cards
-│   ├── layout/                      # Liquid glass navbar & navigation tabs
+│   ├── layout/                      # Liquid glass navbar, avatar, & navigation tabs
 │   ├── telemetry/                   # BullMQ Cron panel & worker metric tables
 │   └── views/
 │       ├── ArchitectureView.tsx     # Interactive system architecture spec
@@ -406,6 +466,7 @@ my-app/
 │       ├── StudioView.tsx           # React Flow workflow studio & delete modal
 │       └── TelemetryView.tsx        # Cluster telemetry & live SSE stream
 ├── lib/
+│   ├── auth/                        # SMTP email dispatch & session signing
 │   ├── cron/scheduler.ts            # BullMQ repeatable job helper methods
 │   ├── dag/cycle-detector.ts        # Kahn's algorithm & 3-Color DFS cycle guard
 │   ├── queue/bullmq.ts              # BullMQ queue & worker initialization
@@ -420,7 +481,10 @@ my-app/
 ├── src/workers/
 │   ├── autoscaler.ts                # Celery-style PID backlog autoscaler
 │   └── dag-worker.ts                # Standalone BullMQ DAG worker entrypoint
-├── docker-compose.yml               # PostgreSQL 16 + Redis 7 Docker services
+├── .dockerignore                    # Build optimization ignore rules
+├── Dockerfile                       # Multi-stage production container definition
+├── docker-compose.yml               # PostgreSQL 16 + Redis 7 + App Docker services
+├── instrumentation.ts               # Next.js startup hooks & embedded worker boot
 ├── package.json                     # Scripts and dependencies
 └── README.md                        # Documentation
 ```
