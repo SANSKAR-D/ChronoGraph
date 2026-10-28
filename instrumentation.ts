@@ -13,5 +13,15 @@ export async function register() {
     } catch (err) {
       console.warn("[WebSocket] Could not initialize Socket.IO server:", err);
     }
+
+    if (process.env.NEXT_PHASE !== "phase-production-build" && process.env.ENABLE_EMBEDDED_WORKER !== "false" && !process.env.VERCEL) {
+      try {
+        const { startDagWorker } = await import("./src/workers/dag-worker");
+        startDagWorker();
+        console.log("[Worker] Embedded DAG execution worker started.");
+      } catch (err) {
+        console.warn("[Worker] Could not initialize embedded DAG worker:", err);
+      }
+    }
   }
 }
