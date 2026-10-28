@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getClusterHealth } from "@/lib/telemetry/cluster-health";
+import { initSocketServer } from "@/lib/socket/server";
 
 /**
  * GET /api/v1/cluster/health
@@ -8,6 +9,10 @@ import { getClusterHealth } from "@/lib/telemetry/cluster-health";
  * Returns active worker count, heartbeat timestamps, and queue metrics (Waiting, Active, Delayed, DLQ).
  */
 export async function GET() {
+  try {
+    initSocketServer();
+  } catch {}
+
   try {
     const health = await getClusterHealth();
 

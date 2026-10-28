@@ -26,6 +26,7 @@ import {
   Save,
 } from "lucide-react";
 import { validateDAG } from "@/lib/dag/cycle-detector";
+import { getSocket } from "@/lib/socket/client";
 
 export type CoreNodeType =
   | "webhook_trigger"
@@ -320,6 +321,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const [nodes, setNodes] = useState<WorkflowNode[]>(PRESEEDED_DEMO_TEMPLATES[0].nodes);
   const [connections, setConnections] = useState<Connection[]>(PRESEEDED_DEMO_TEMPLATES[0].connections);
   const [isRunning, setIsRunning] = useState(false);
+  const [executingNodeName, setExecutingNodeName] = useState<string | null>(null);
   const [activeEdgeIndex, setActiveEdgeIndex] = useState<number>(-1);
 
   // Selected Node for Node Inspector Drawer (Target URL, Retries, Jitter Backoff)
@@ -500,6 +502,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
       localStorage.setItem("chronograph_active_template", "new_blank");
     } catch {}
     setIsRunning(false);
+    setExecutingNodeName(null);
     setActiveEdgeIndex(-1);
     setIsDrawerOpen(true);
     showToast("Created new workflow — select cards from the desk below");
@@ -540,6 +543,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     setConnections(loadedConnections);
     setSelectedNodeId(null);
     setIsRunning(false);
+    setExecutingNodeName(null);
     setActiveEdgeIndex(-1);
     showToast(`Loaded "${wf.name}"`);
   };
@@ -558,6 +562,7 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     setConnections(tmpl.connections);
     setSelectedNodeId(null);
     setIsRunning(false);
+    setExecutingNodeName(null);
     setActiveEdgeIndex(-1);
     showToast(`Loaded "${tmpl.name}"`);
   };
@@ -862,30 +867,56 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         const data = await res.json();
         if (data && data.runId) {
           runId = String(data.runId);
-          showToast(`Run dispatched (${String(data.runId).slice(0, 8)}...) • SSE Connected`);
+          showToast(`Run dispatched (${String(data.runId).slice(0, 8)}...) • WebSocket Connected`);
         }
       }
     } catch {
       // Offline fallback mode
     }
 
-    // 2. If real SSE runId is available, connect EventSource to /api/v1/runs/[runId]/stream
+    // 2. Connect via WebSocket (Socket.IO) with SSE fallback
     let eventSource: EventSource | null = null;
+    let activeSocket: any = null;
     if (runId) {
+      const handleRunPayload = (parsed: any) => {
+        if (!parsed) return;
+        if (parsed.nodeId) {
+          const matched = nodes.find((n) => n.id === parsed.nodeId);
+          if (parsed.status === "RUNNING") {
+            setExecutingNodeName(matched?.name || parsed.nodeId);
+          }
+          setNodes((prev) =>
+            prev.map((n) =>
+              n.id === parsed.nodeId
+                ? {
+                    ...n,
+                    status:
+                      parsed.status === "COMPLETED" || parsed.status === "SUCCESS"
+                        ? "success"
+                        : "running",
+                  }
+                : n
+            )
+          );
+        }
+      };
+
+      try {
+        activeSocket = getSocket({ runId });
+        if (activeSocket) {
+          activeSocket.on("run:event", handleRunPayload);
+          activeSocket.on("NODE_STATE_CHANGE", handleRunPayload);
+          activeSocket.on("WORKFLOW_COMPLETED", handleRunPayload);
+        }
+      } catch {
+        // socket connection fallback
+      }
+
       try {
         eventSource = new EventSource(`/api/v1/runs/${runId}/stream`);
         const handleRunMessage = (e: MessageEvent) => {
           try {
-            const parsed = JSON.parse(e.data);
-            if (parsed.nodeId) {
-              setNodes((prev) =>
-                prev.map((n) =>
-                  n.id === parsed.nodeId
-                    ? { ...n, status: parsed.status === "COMPLETED" || parsed.status === "SUCCESS" ? "success" : "running" }
-                    : n
-                )
-              );
-            }
+            handleRunPayload(JSON.parse(e.data));
           } catch {}
         };
         eventSource.onmessage = handleRunMessage;
@@ -904,8 +935,12 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         : nodes.map((n) => n.id);
 
     topoOrder.forEach((nodeId, idx) => {
+      const nodeObj = nodes.find((n) => n.id === nodeId);
+      const nodeName = nodeObj?.name || nodeId;
+
       setTimeout(() => {
         setActiveEdgeIndex(idx);
+        setExecutingNodeName(nodeName);
         setNodes((prev) =>
           prev.map((n) => (n.id === nodeId ? { ...n, status: "running" } : n))
         );
@@ -920,13 +955,18 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
 
     setTimeout(() => {
       setIsRunning(false);
+      setExecutingNodeName(null);
       setActiveEdgeIndex(-1);
       eventSource?.close();
+      if (activeSocket && runId) {
+        activeSocket.emit("unsubscribe:run", runId);
+      }
     }, topoOrder.length * 750 + 800);
   };
 
   const resetWorkflow = () => {
     setIsRunning(false);
+    setExecutingNodeName(null);
     setActiveEdgeIndex(-1);
     setNodes((prev) => prev.map((n) => ({ ...n, status: "idle" })));
   };
@@ -1360,7 +1400,13 @@ export function StudioView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           title="Simulate DAG Execution"
         >
           <Play className={`h-3.5 w-3.5 fill-current ${isRunning ? "animate-pulse" : ""}`} />
-          <span>{isRunning ? "Executing..." : "Execute"}</span>
+          <span>
+            {isRunning
+              ? executingNodeName
+                ? `Executing: ${executingNodeName}...`
+                : "Executing..."
+              : "Execute"}
+          </span>
           <span className="hidden sm:inline">{isRunning ? "" : " Workflow"}</span>
         </button>
 
