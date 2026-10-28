@@ -118,7 +118,7 @@ export async function emitWorkerHeartbeat(
   const heartbeatPayload: WorkerHeartbeatPayload = {
     workerId,
     name: `dag-worker-${workerId.slice(-4)}`,
-    status: activeJobs >= concurrency ? "busy" : "healthy",
+    status: activeJobs > 0 ? "busy" : "healthy",
     concurrency,
     cpu: cpuPercent,
     memory: `${memMb} MB`,
@@ -163,10 +163,20 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
 
   let currentlyActiveJobs = 0;
 
+  // T3.1: Heartbeat emitter: worker:heartbeat:{workerId}
+  const emitHeartbeat = async () => {
+    try {
+      await emitWorkerHeartbeat(workerId, concurrency, currentlyActiveJobs, redisClient);
+    } catch (hbErr) {
+      console.warn(`[DAGWorker ${workerId}] Failed to emit heartbeat:`, hbErr);
+    }
+  };
+
   const worker = new Worker<DAGJobData>(
     QUEUE_NAMES.DAG_EXECUTION,
     async (job: Job<DAGJobData>) => {
       currentlyActiveJobs++;
+      emitHeartbeat().catch(() => {});
       const startTime = Date.now();
       const {
         runId,
@@ -548,6 +558,7 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
         };
       } finally {
         currentlyActiveJobs = Math.max(0, currentlyActiveJobs - 1);
+        emitHeartbeat().catch(() => {});
       }
     },
     {
@@ -598,15 +609,6 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
   worker.on("completed", (job) => {
     console.log(`[DAGWorker ${workerId}] Job ${job.id} completed successfully.`);
   });
-
-  // T3.1: Heartbeat emitter: worker:heartbeat:{workerId}
-  const emitHeartbeat = async () => {
-    try {
-      await emitWorkerHeartbeat(workerId, concurrency, currentlyActiveJobs, redisClient);
-    } catch (hbErr) {
-      console.warn(`[DAGWorker ${workerId}] Failed to emit heartbeat:`, hbErr);
-    }
-  };
 
   // Start heartbeat interval
   emitHeartbeat();

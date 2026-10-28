@@ -5,8 +5,14 @@ import { Activity, Server, RefreshCw, Radio } from "lucide-react";
 import { CronSchedulersPanel } from "@/components/telemetry/CronSchedulersPanel";
 
 interface WorkerNode {
-  id: string; name: string; status: "healthy" | "busy";
-  concurrency: number; cpu: number; memory: string; lastHeartbeat: string;
+  id: string;
+  name: string;
+  status: "healthy" | "busy";
+  activeJobs: number;
+  maxConcurrency: number;
+  cpu: number;
+  memory: string;
+  lastHeartbeat: string;
 }
 
 export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) {
@@ -36,20 +42,26 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
               waiting: data.queueMetrics.waiting ?? data.queueMetrics.Waiting ?? 0,
               active: data.queueMetrics.active ?? data.queueMetrics.Active ?? 0,
               delayed: data.queueMetrics.delayed ?? data.queueMetrics.Delayed ?? 0,
-              dlq: data.queueMetrics.dlq ?? data.queueMetrics.DLQ ?? 0,
+              dlq: data.queues?.deadLetter?.database?.unresolved ?? data.queueMetrics.dlq ?? 0,
             });
           }
           if (Array.isArray(data.workers)) {
             setWorkers(
-              data.workers.map((w: any) => ({
-                id: w.workerId || w.id || "worker",
-                name: w.name || w.workerId || "dag-worker",
-                status: w.status === "busy" ? "busy" : "healthy",
-                concurrency: w.concurrency ?? w.activeJobs ?? 0,
-                cpu: w.cpu ?? 0,
-                memory: w.memory || "0 MB",
-                lastHeartbeat: w.lastHeartbeat || "Just now",
-              }))
+              data.workers.map((w: any) => {
+                const activeJobs = w.activeJobs ?? 0;
+                const maxConcurrency = w.concurrency ?? 10;
+                const isBusy = activeJobs > 0 || w.status === "busy";
+                return {
+                  id: w.workerId || w.id || "worker",
+                  name: w.name || w.workerId || "dag-worker",
+                  status: isBusy ? "busy" : "healthy",
+                  activeJobs,
+                  maxConcurrency,
+                  cpu: w.cpu ?? 0,
+                  memory: w.memory || "0 MB",
+                  lastHeartbeat: w.lastHeartbeat || "Just now",
+                };
+              })
             );
           }
           if (Array.isArray(data.recentEvents) && data.recentEvents.length > 0) {
@@ -342,7 +354,7 @@ export function TelemetryView({ theme = "dark" }: { theme?: "dark" | "light" }) 
                         isLight ? "text-[#5E695E]" : "text-[#8B968B]"
                       }`}
                     >
-                      {w.concurrency} / 10 jobs
+                      {w.activeJobs} / {w.maxConcurrency} jobs
                     </td>
                     <td
                       className={`py-3 px-4 font-mono ${

@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const records = await db.deadLetterJob.findMany({
       orderBy: { failedAt: "desc" },
-      take: 50,
+      take: 100,
       include: {
         run: {
           select: {

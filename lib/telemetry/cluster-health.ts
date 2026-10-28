@@ -145,6 +145,16 @@ export async function getClusterHealth(
     console.warn("[ClusterHealth] Failed to get DAG queue counts:", err);
   }
 
+  // Sync real-time active jobs with BullMQ queue count if active jobs are in-flight
+  if (workers.length > 0 && dagCounts.active > 0) {
+    for (const w of workers) {
+      if (!w.activeJobs || w.activeJobs === 0) {
+        w.activeJobs = dagCounts.active;
+        w.status = "busy";
+      }
+    }
+  }
+
   try {
     cronCounts = await cronQueue.getJobCounts(
       "waiting",

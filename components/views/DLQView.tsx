@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   AlertTriangle,
   RotateCw,
@@ -28,17 +28,26 @@ export function DLQView({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const isLight = theme === "light";
   const [jobs, setJobs] = useState<DLQJob[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchJobs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/dlq");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success && Array.isArray(data.jobs)) {
+        setJobs(data.jobs);
+      }
+    } catch {
+      // ignore network abort
+    }
+  }, []);
 
   useEffect(() => {
-    fetch("/api/v1/dlq")
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => {
-        if (data.success && Array.isArray(data.jobs)) {
-          setJobs(data.jobs);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    fetchJobs();
+    const timer = setInterval(fetchJobs, 3500);
+    return () => clearInterval(timer);
+  }, [fetchJobs]);
 
   const replayJob = async (id: string) => {
     setJobs((prev) =>
@@ -69,7 +78,10 @@ export function DLQView({ theme = "dark" }: { theme?: "dark" | "light" }) {
         setNotification(`Job ${id} re-queued for execution.`);
       }, 1000);
     }
-    setTimeout(() => setNotification(null), 4000);
+    setTimeout(() => {
+      fetchJobs();
+      setNotification(null);
+    }, 4000);
   };
 
   const replayAll = async () => {
@@ -88,6 +100,7 @@ export function DLQView({ theme = "dark" }: { theme?: "dark" | "light" }) {
     setTimeout(() => {
       setJobs((prev) => prev.map((j) => ({ ...j, status: "replayed" })));
       setNotification(`All ${pendingJobs.length} DLQ jobs re-queued for topological execution.`);
+      fetchJobs();
       setTimeout(() => setNotification(null), 4000);
     }, 1200);
   };
@@ -132,15 +145,34 @@ export function DLQView({ theme = "dark" }: { theme?: "dark" | "light" }) {
           </p>
         </div>
 
-        <button
-          onClick={replayAll}
-          disabled={jobs.filter((j) => j.status === "pending").length === 0}
-          type="button"
-          className="flex items-center gap-1.5 rounded-full bg-[#E5735C] hover:bg-[#d6654e] disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 text-xs font-bold text-[#0C100D] transition-all cursor-pointer shadow-md shadow-[#E5735C]/25 active:scale-95"
-        >
-          <RotateCw className="h-3.5 w-3.5" />
-          <span>Replay All Jobs</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setIsRefreshing(true);
+              fetchJobs().finally(() => setTimeout(() => setIsRefreshing(false), 500));
+            }}
+            type="button"
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
+              isLight
+                ? "border-[#D1D9D0] bg-white text-[#141A15] hover:border-[#7FBF6A] shadow-xs"
+                : "border-[#243026] bg-[#0C100D] text-[#E8ECE4] hover:border-[#7FBF6A]/50 shadow-xs"
+            }`}
+            title="Refresh DLQ"
+          >
+            <RotateCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-[#7FBF6A]" : ""}`} />
+            <span>Refresh</span>
+          </button>
+
+          <button
+            onClick={replayAll}
+            disabled={jobs.filter((j) => j.status === "pending").length === 0}
+            type="button"
+            className="flex items-center gap-1.5 rounded-full bg-[#E5735C] hover:bg-[#d6654e] disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 text-xs font-bold text-[#0C100D] transition-all cursor-pointer shadow-md shadow-[#E5735C]/25 active:scale-95"
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+            <span>Replay All Jobs</span>
+          </button>
+        </div>
       </div>
 
       {/* Jobs List */}
