@@ -506,14 +506,10 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
               <span>DISTRIBUTED DAG ENGINE</span>
             </div>
 
-            <PluckedText
-              text="CHRONOGRAPH"
-              accentStartIndex={6}
-              accentClassName="text-[#75d555ff]"
-              textClassName="text-[#E8ECE4]"
-              tension={1.2}
-              className="my-1 font-[family-name:var(--font-brand)] text-3xl sm:text-4xl tracking-tight"
-            />
+            <h1 className="my-1 font-[family-name:var(--font-brand)] text-4xl sm:text-5xl tracking-tight font-black select-none">
+              <span className="text-[#E8ECE4]">CHRONO</span>
+              <span className="text-[#75d555ff]">GRAPH</span>
+            </h1>
 
             <p className="mt-2 text-xs sm:text-sm text-[#C8D2C5] max-w-xs leading-relaxed drop-shadow">
               High-throughput workflow orchestration with zero cycle deadlocks and atomic fan-out.

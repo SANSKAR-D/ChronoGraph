@@ -70,8 +70,11 @@ export default function ChronoGraphApp() {
       if (!VALID_TABS.includes(target)) target = "home";
 
       if (PROTECTED_TABS.includes(target) && !currentUser) {
-        window.location.href = "/login";
-        return;
+        // If unauthenticated on initial load, default to public home page instead of redirect loop
+        target = "home";
+        try {
+          localStorage.setItem("chronograph_active_tab", "home");
+        } catch {}
       }
 
       setSelectedTab(target);

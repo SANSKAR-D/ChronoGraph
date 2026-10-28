@@ -153,6 +153,7 @@ export function PluckedTextBase({
       const svgBox = svg.getBoundingClientRect();
       const lettersLeft = lettersEl.getBoundingClientRect().left - svgBox.left;
       length = svgBox.width;
+      if (length <= 0) return;
       swing = Number.parseFloat(getComputedStyle(stage).fontSize) * MAX_SWING;
       const f0 = (WAVE_SPEED * tension) / (2 * length);
       const count = Math.max(
