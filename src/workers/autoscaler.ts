@@ -150,6 +150,7 @@ export class WorkerAutoscaler {
           WORKER_ID: workerId,
           WORKER_CONCURRENCY: this.workerConcurrency.toString(),
           RUN_STANDALONE_WORKER: "true",
+          IS_FORKED_CHILD: "true",
         },
         stdio: "inherit",
       });
@@ -388,6 +389,20 @@ export class WorkerAutoscaler {
 
 // Standalone CLI execution entrypoint: tsx src/workers/autoscaler.ts
 if (require.main === module || process.env.RUN_STANDALONE_AUTOSCALER === "true") {
+  // Bind lightweight healthcheck HTTP server for PaaS web services (Render, Railway, Koyeb)
+  if (process.env.PORT || process.env.RENDER) {
+    import("http").then((http) => {
+      const port = parseInt(process.env.PORT || "10000", 10);
+      const server = http.createServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("ChronoGraph Worker Autoscaler Healthy\n");
+      });
+      server.listen(port, "0.0.0.0", () => {
+        console.log(`[WorkerAutoscaler] PaaS HTTP Healthcheck listening on port ${port}`);
+      });
+    }).catch(() => {});
+  }
+
   const autoscaler = new WorkerAutoscaler();
   autoscaler.start().catch((err) => {
     console.error("[WorkerAutoscaler] Fatal error:", err);

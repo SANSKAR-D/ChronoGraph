@@ -658,6 +658,20 @@ export async function stopDagWorker(): Promise<void> {
 
 // Standalone execution entrypoint when run via CLI: tsx src/workers/dag-worker.ts
 if (require.main === module || process.env.RUN_STANDALONE_WORKER === "true") {
+  // Bind lightweight healthcheck HTTP server for PaaS web services (Render, Railway, Koyeb)
+  if ((process.env.PORT || process.env.RENDER) && !process.env.IS_FORKED_CHILD) {
+    import("http").then((http) => {
+      const port = parseInt(process.env.PORT || "10000", 10);
+      const server = http.createServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("ChronoGraph DAG Worker Healthy\n");
+      });
+      server.listen(port, "0.0.0.0", () => {
+        console.log(`[DAGWorker] PaaS HTTP Healthcheck listening on port ${port}`);
+      });
+    }).catch(() => {});
+  }
+
   console.log("⚡ Starting ChronoGraph Distributed DAG Worker Process...");
   // Auto-seed demo blueprints on worker startup
   import("../../scripts/seed-workflows")
