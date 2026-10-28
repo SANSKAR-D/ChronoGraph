@@ -37,12 +37,20 @@ const globalForQueues = globalThis as unknown as {
   dlqQueue?: Queue;
 };
 
+function initQueue(name: string): Queue {
+  const q = new Queue(name, getQueueOptions());
+  q.on("error", (err) => {
+    console.warn(`[BullMQ Queue ${name}] Connection warning: ${err.message}`);
+  });
+  return q;
+}
+
 /**
  * Returns the singleton BullMQ Queue dedicated to repeatable Cron workflow triggers.
  */
 export function getCronQueue(): Queue {
   if (!globalForQueues.cronQueue) {
-    globalForQueues.cronQueue = new Queue(QUEUE_NAMES.CRON_TRIGGERS, getQueueOptions());
+    globalForQueues.cronQueue = initQueue(QUEUE_NAMES.CRON_TRIGGERS);
   }
   return globalForQueues.cronQueue;
 }
@@ -52,7 +60,7 @@ export function getCronQueue(): Queue {
  */
 export function getDagExecutionQueue(): Queue {
   if (!globalForQueues.dagQueue) {
-    globalForQueues.dagQueue = new Queue(QUEUE_NAMES.DAG_EXECUTION, getQueueOptions());
+    globalForQueues.dagQueue = initQueue(QUEUE_NAMES.DAG_EXECUTION);
   }
   return globalForQueues.dagQueue;
 }
@@ -62,7 +70,7 @@ export function getDagExecutionQueue(): Queue {
  */
 export function getDeadLetterQueue(): Queue {
   if (!globalForQueues.dlqQueue) {
-    globalForQueues.dlqQueue = new Queue(QUEUE_NAMES.DEAD_LETTER, getQueueOptions());
+    globalForQueues.dlqQueue = initQueue(QUEUE_NAMES.DEAD_LETTER);
   }
   return globalForQueues.dlqQueue;
 }

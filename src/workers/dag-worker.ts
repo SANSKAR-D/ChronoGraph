@@ -587,6 +587,11 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
     }
   );
 
+  // BullMQ Worker error event listener to prevent unhandled node crash on socket disconnect
+  worker.on("error", (err) => {
+    console.warn(`[DAGWorker ${workerId}] BullMQ worker connection warning: ${err.message}`);
+  });
+
   // T3.4: Hook into BullMQ `failed` event for DLQ routing and retry telemetry
   worker.on("failed", async (job, err) => {
     if (!job) {

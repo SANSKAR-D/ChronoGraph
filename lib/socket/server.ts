@@ -9,7 +9,12 @@ declare global {
   var __chronoGraphSocketIO: SocketIOServer | undefined;
 }
 
-export function initSocketServer(): SocketIOServer {
+export function initSocketServer(): SocketIOServer | null {
+  // Never attempt to start Socket.IO HTTP server on Vercel serverless functions
+  if (process.env.VERCEL || process.env.NEXT_RUNTIME === "edge") {
+    return null;
+  }
+
   if (globalThis.__chronoGraphSocketIO) {
     return globalThis.__chronoGraphSocketIO;
   }
