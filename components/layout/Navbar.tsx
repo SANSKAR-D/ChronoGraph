@@ -72,6 +72,11 @@ export function Navbar({
   }, [propHasDlqAlert]);
 
   useEffect(() => {
+    if (!currentUser) {
+      setHasDlqAlert(false);
+      return;
+    }
+
     let mounted = true;
     const checkDlq = async () => {
       try {
@@ -93,7 +98,7 @@ export function Navbar({
     };
 
     checkDlq();
-    const interval = setInterval(checkDlq, 4000);
+    const interval = setInterval(checkDlq, 15000);
     const onDlqChange = () => checkDlq();
     window.addEventListener("chronograph:dlq-change", onDlqChange);
 
@@ -102,7 +107,7 @@ export function Navbar({
       clearInterval(interval);
       window.removeEventListener("chronograph:dlq-change", onDlqChange);
     };
-  }, []);
+  }, [currentUser]);
 
   return (
     <motion.header

@@ -10,12 +10,14 @@ export function createRedisConnection(overrides?: Partial<RedisOptions>): Redis 
   const client = new Redis(REDIS_URL, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
+    lazyConnect: true,
     keepAlive: 10000,
-    connectTimeout: 15000,
+    connectTimeout: 5000,
+    commandTimeout: 4000,
     family: 4, // Prefer IPv4 for cloud network stability
     retryStrategy(times) {
-      // Exponential backoff with a cap of 3 seconds
-      return Math.min(times * 100, 3000);
+      if (times > 3) return null; // Avoid hanging serverless lambdas in retry loops
+      return Math.min(times * 150, 1000);
     },
     reconnectOnError(err) {
       const targetErrors = ["READONLY", "EPIPE", "ECONNRESET", "ETIMEDOUT"];
@@ -42,8 +44,7 @@ const globalForRedis = globalThis as unknown as {
 
 export const redis: Redis = globalForRedis.redisClient ?? createRedisConnection();
 
-if (process.env.NODE_ENV !== "production") {
-  globalForRedis.redisClient = redis;
-}
+// Cache redis client on globalThis across all environments to reuse warm connection in serverless
+globalForRedis.redisClient = redis;
 
 export default redis;

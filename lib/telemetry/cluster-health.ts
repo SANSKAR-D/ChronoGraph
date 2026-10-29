@@ -141,40 +141,20 @@ export async function getClusterHealth(
     // Non-critical telemetry enrichment
   }
 
-  // 2. Query BullMQ Queue Job Counts
+  // 2. Query BullMQ Queue Job Counts concurrently
   let dagCounts = { waiting: 0, active: 0, delayed: 0, failed: 0, completed: 0 };
   let cronCounts = { waiting: 0, active: 0, delayed: 0, failed: 0 };
   let dlqQueueCounts = { waiting: 0, active: 0, failed: 0 };
 
-  try {
-    dagCounts = await dagQueue.getJobCounts(
-      "waiting",
-      "active",
-      "delayed",
-      "failed",
-      "completed"
-    );
-  } catch (err) {
-    console.warn("[ClusterHealth] Failed to get DAG queue counts:", err);
-  }
+  const [dagRes, cronRes, dlqRes] = await Promise.allSettled([
+    dagQueue.getJobCounts("waiting", "active", "delayed", "failed", "completed"),
+    cronQueue.getJobCounts("waiting", "active", "delayed", "failed"),
+    dlqQueue.getJobCounts("waiting", "active", "failed"),
+  ]);
 
-
-  try {
-    cronCounts = await cronQueue.getJobCounts(
-      "waiting",
-      "active",
-      "delayed",
-      "failed"
-    );
-  } catch (err) {
-    console.warn("[ClusterHealth] Failed to get Cron queue counts:", err);
-  }
-
-  try {
-    dlqQueueCounts = await dlqQueue.getJobCounts("waiting", "active", "failed");
-  } catch (err) {
-    console.warn("[ClusterHealth] Failed to get DLQ queue counts:", err);
-  }
+  if (dagRes.status === "fulfilled") dagCounts = dagRes.value;
+  if (cronRes.status === "fulfilled") cronCounts = cronRes.value;
+  if (dlqRes.status === "fulfilled") dlqQueueCounts = dlqRes.value;
 
   // 3. Database Health & DLQ Persistent Records
   let dlqDbTotal = 0;

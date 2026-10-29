@@ -51,9 +51,7 @@ export async function GET(req: NextRequest) {
         console.error("[ClusterEventsSSE] Redis error:", err);
       });
 
-      await subscriber.subscribe(channel);
-
-      // Initial connection handshake
+      // Initial connection handshake - send immediately to acknowledge HTTP connection
       controller.enqueue(
         encoder.encode(
           `event: connected\ndata: ${JSON.stringify({
@@ -62,6 +60,12 @@ export async function GET(req: NextRequest) {
           })}\n\n`
         )
       );
+
+      try {
+        await subscriber.subscribe(channel);
+      } catch (subErr) {
+        console.warn("[ClusterEventsSSE] Redis subscription warning:", subErr);
+      }
 
       // 15s keepalive ping
       pingTimer = setInterval(() => {
