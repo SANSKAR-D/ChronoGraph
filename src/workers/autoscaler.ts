@@ -144,7 +144,15 @@ export class WorkerAutoscaler {
       `autoscale-worker-${this.managedWorkers.size + 1}-${crypto.randomBytes(3).toString("hex")}`;
 
     try {
+      const isTs = this.workerScriptPath.endsWith(".ts");
+      const execArgv = isTs
+        ? process.execArgv.length > 0
+          ? process.execArgv
+          : ["--import", "tsx"]
+        : [];
+
       const child = fork(this.workerScriptPath, [], {
+        execArgv,
         env: {
           ...process.env,
           WORKER_ID: workerId,
@@ -325,6 +333,17 @@ export class WorkerAutoscaler {
       `⚡ [WorkerAutoscaler] Starting Celery-style worker autoscaler (min: ${this.minWorkers}, max: ${this.maxWorkers}, target: ${this.targetBacklogPerWorker} jobs/worker)...`
     );
 
+    // Start primary in-process DAG worker to guarantee active job execution in PaaS
+    try {
+      const { startDagWorker } = await import("./dag-worker");
+      startDagWorker({
+        workerId: `autoscale-primary-${crypto.randomBytes(3).toString("hex")}`,
+        concurrency: this.workerConcurrency,
+      });
+    } catch (workerErr) {
+      console.warn("[WorkerAutoscaler] In-process worker notice:", workerErr);
+    }
+
     // Warm up minimum worker pool
     while (this.getActiveWorkerCount() < this.minWorkers) {
       this.spawnWorker();
@@ -378,6 +397,11 @@ export class WorkerAutoscaler {
 
     await Promise.all(terminationPromises);
     this.managedWorkers.clear();
+
+    try {
+      const { stopDagWorker } = await import("./dag-worker");
+      await stopDagWorker();
+    } catch {}
 
     try {
       await this.redisClient.del("cluster:autoscaler:state");
