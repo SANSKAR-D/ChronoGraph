@@ -580,6 +580,7 @@ export function createDagWorker(options?: DagWorkerOptions): Worker<DAGJobData> 
       connection: createRedisConnection(),
       concurrency,
       lockDuration: 15000,
+      skipVersionCheck: true,
       // T3.3: Exponential Backoff + Full Jitter custom strategy
       settings: {
         backoffStrategy: bullMQExponentialJitterBackoff,

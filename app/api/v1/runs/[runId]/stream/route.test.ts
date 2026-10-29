@@ -125,4 +125,29 @@ describe("GET /api/v1/runs/[runId]/stream", () => {
 
     await reader!.cancel();
   });
+
+  it("closes stream cleanly if workflow run is already completed", async () => {
+    const validUuid = "33333333-4444-5555-6666-777777777777";
+    vi.mocked(db.workflowRun.findUnique).mockResolvedValue({
+      id: validUuid,
+      status: "COMPLETED" as any,
+    } as any);
+
+    const req = new NextRequest(`http://localhost:3000/api/v1/runs/${validUuid}/stream`);
+    const res = await GET(req, {
+      params: Promise.resolve({ runId: validUuid }),
+    });
+
+    expect(res.status).toBe(200);
+    const reader = res.body?.getReader();
+    const firstChunk = await reader!.read();
+    expect(firstChunk.done).toBe(false);
+    const decoder = new TextDecoder();
+    expect(decoder.decode(firstChunk.value)).toContain("COMPLETED");
+
+    // Wait briefly for auto-close of completed run
+    await new Promise((r) => setTimeout(r, 150));
+    const nextChunk = await reader!.read();
+    expect(nextChunk.done).toBe(true);
+  });
 });

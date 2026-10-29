@@ -46,6 +46,7 @@ export function createCronWorker(concurrency = 5): Worker<CronJobData> {
       connection: createRedisConnection(),
       concurrency,
       lockDuration: 15000,
+      skipVersionCheck: true,
     }
   );
 

@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { createRedisConnection } from "@/lib/redis/client";
 
 
+export const maxDuration = 60;
+
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,6 +37,7 @@ export async function GET(
   const subscriber = createRedisConnection();
   const encoder = new TextEncoder();
   let pingTimer: NodeJS.Timeout | null = null;
+  let autoCloseTimer: NodeJS.Timeout | null = null;
   let isClosed = false;
 
   const stream = new ReadableStream({
@@ -43,13 +46,21 @@ export async function GET(
         if (isClosed) return;
         isClosed = true;
         if (pingTimer) clearInterval(pingTimer);
+        if (autoCloseTimer) clearTimeout(autoCloseTimer);
         subscriber.unsubscribe(channel).catch(() => {});
-        subscriber.quit().catch(() => {
-          subscriber.disconnect();
-        });
+        subscriber.quit().catch(() => subscriber.disconnect());
+        try {
+          controller.close();
+        } catch {}
       };
 
       req.signal.addEventListener("abort", cleanup);
+
+      // On serverless platforms (Vercel), auto-close after 50s to avoid 300s runtime execution timeouts
+      if (process.env.VERCEL) {
+        autoCloseTimer = setTimeout(cleanup, 50000);
+        if (autoCloseTimer.unref) autoCloseTimer.unref();
+      }
 
       subscriber.on("message", (chan, msg) => {
         if (chan !== channel || isClosed) return;
@@ -59,6 +70,13 @@ export async function GET(
           controller.enqueue(
             encoder.encode(`event: ${eventType}\ndata: ${msg}\n\nevent: message\ndata: ${msg}\n\n`)
           );
+
+          if (
+            ["COMPLETED", "FAILED", "CANCELLED"].includes(parsed.status) ||
+            parsed.event === "RUN_COMPLETED"
+          ) {
+            setTimeout(cleanup, 200);
+          }
         } catch {
           controller.enqueue(encoder.encode(`data: ${msg}\n\n`));
         }
@@ -81,6 +99,12 @@ export async function GET(
         )
       );
 
+      // If run was already finished, close stream cleanly immediately after sending handshake
+      if (["COMPLETED", "FAILED", "CANCELLED"].includes(run.status)) {
+        setTimeout(cleanup, 100);
+        return;
+      }
+
       // 15s keep-alive heartbeat to prevent proxy timeouts
       pingTimer = setInterval(() => {
         if (isClosed) return;
@@ -94,6 +118,7 @@ export async function GET(
     cancel() {
       if (!isClosed) {
         if (pingTimer) clearInterval(pingTimer);
+        if (autoCloseTimer) clearTimeout(autoCloseTimer);
         subscriber.unsubscribe(channel).catch(() => {});
         subscriber.quit().catch(() => subscriber.disconnect());
         isClosed = true;

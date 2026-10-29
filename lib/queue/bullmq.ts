@@ -14,6 +14,7 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 function getQueueOptions(): QueueOptions {
   return {
     connection: createRedisConnection(),
+    skipVersionCheck: true,
     defaultJobOptions: {
       attempts: 3,
       backoff: {
