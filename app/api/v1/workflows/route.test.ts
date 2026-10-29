@@ -13,6 +13,11 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+vi.mock("@/lib/cron/scheduler", () => ({
+  removeWorkflowCron: vi.fn().mockResolvedValue({ success: true }),
+  removeRepeatableJobScheduler: vi.fn().mockResolvedValue({ success: true }),
+}));
+
 import { db } from "@/lib/db";
 
 describe("Workflows API: GET and POST /api/v1/workflows", () => {

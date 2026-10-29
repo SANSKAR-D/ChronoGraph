@@ -10,14 +10,12 @@ export function createRedisConnection(overrides?: Partial<RedisOptions>): Redis 
   const client = new Redis(REDIS_URL, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
-    lazyConnect: true,
     keepAlive: 10000,
-    connectTimeout: 5000,
-    commandTimeout: 4000,
+    connectTimeout: 10000,
     family: 4, // Prefer IPv4 for cloud network stability
     retryStrategy(times) {
-      if (times > 3) return null; // Avoid hanging serverless lambdas in retry loops
-      return Math.min(times * 150, 1000);
+      // Reconnect with exponential backoff capped at 3s; never return null to avoid permanently closing connection
+      return Math.min(times * 100, 3000);
     },
     reconnectOnError(err) {
       const targetErrors = ["READONLY", "EPIPE", "ECONNRESET", "ETIMEDOUT"];
