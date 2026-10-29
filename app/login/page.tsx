@@ -107,7 +107,12 @@ export default function LoginPage() {
 
       {/* Back button */}
       <button
-        onClick={() => (window.location.href = "/")}
+        onClick={() => {
+          try {
+            localStorage.setItem("chronograph_active_tab", "home");
+          } catch {}
+          window.location.href = "/";
+        }}
         type="button"
         className={`absolute top-6 left-6 flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full border transition-all cursor-pointer ${
           isLight

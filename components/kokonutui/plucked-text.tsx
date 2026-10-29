@@ -110,12 +110,18 @@ export function PluckedTextBase({
   const ghostRef = useRef<SVGPathElement>(null);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      return;
+    }
     const stage = stageRef.current;
     const lettersEl = lettersRef.current;
     const svg = svgRef.current;
     const path = pathRef.current;
     const ghost = ghostRef.current;
     if (!(stage && lettersEl && svg && path && ghost)) {
+      return;
+    }
+    if (stage.offsetParent === null) {
       return;
     }
 
@@ -145,7 +151,8 @@ export function PluckedTextBase({
     let prev: { x: number; y: number; t: number } | null = null;
 
     const measure = () => {
-      const probe = lettersEl.lastElementChild as HTMLElement;
+      const probe = lettersEl.lastElementChild as HTMLElement | null;
+      if (!probe) return;
       stage.style.setProperty(
         "--pluck-baseline",
         `${lettersEl.offsetTop + probe.offsetTop + probe.offsetHeight}px`

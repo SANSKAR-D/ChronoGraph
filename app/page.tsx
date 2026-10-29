@@ -84,7 +84,13 @@ export default function ChronoGraphApp() {
   const handleTabChange = (key: string) => {
     if (!VALID_TABS.includes(key)) return;
     if (PROTECTED_TABS.includes(key) && !currentUser) {
-      window.location.href = "/login";
+      // Do not hijack browser navigation or force redirect during touch scrolling.
+      // Revert active tab to 'home' and reset storage to avoid redirect loops on mobile.
+      setSelectedTab("home");
+      try {
+        localStorage.setItem("chronograph_active_tab", "home");
+        window.history.replaceState(null, "", window.location.pathname);
+      } catch {}
       return;
     }
     setSelectedTab(key);

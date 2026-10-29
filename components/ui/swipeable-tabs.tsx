@@ -187,6 +187,7 @@ export function TabPanelCarousel({
           scrollTimeline: "--scroll x",
           scrollbarWidth: "none",
           msOverflowStyle: "none",
+          overscrollBehaviorX: "contain",
         } as CSSProperties
       }
       className={`relative flex w-full flex-1 overflow-x-auto snap-x snap-mandatory no-scrollbar ${

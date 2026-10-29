@@ -53,6 +53,9 @@ export function Navbar({
     if (!currentUser) {
       e.preventDefault();
       e.stopPropagation();
+      try {
+        localStorage.setItem("chronograph_active_tab", "home");
+      } catch {}
       window.location.href = "/login";
     }
   };

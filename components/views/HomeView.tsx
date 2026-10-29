@@ -299,6 +299,7 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
 
   // Direct 1:1 hardware vsync scroll binding with cached geometry (zero layout thrashing)
   useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) return;
     const el = scrollContainerRef.current;
     const track = trackRef.current;
     if (!el || !track) return;
@@ -475,7 +476,7 @@ export function HomeView({ onSelectTab, onLogin }: HomeViewProps) {
   return (
     <div
       ref={scrollContainerRef}
-      className="relative h-full w-full overflow-y-auto no-scrollbar bg-[#0C100D]"
+      className="relative h-full w-full overflow-y-auto no-scrollbar bg-[#0C100D] touch-pan-y"
     >
       {/* Technical DAG grid background */}
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
